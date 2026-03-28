@@ -50,67 +50,160 @@ RUN cd /usr/share/qemu && \
 # Create storage directory
 RUN mkdir -p ${STORAGE_DIR}
 
-# Create helper script for Windows 10
+# Create helper script for Windows 10 (production-grade)
 RUN cat > /usr/local/bin/win10 << 'EOF'
 #!/bin/sh
-# Windows 10 QEMU Helper Script
-# Usage: win10 [disk.qcow2] [iso.iso]
+# Windows 10 QEMU Helper Script (optimized for performance)
+# Usage: win10 [config]
+# Example: CPUS=6 MEMORY=16G VNC_PORT=0 win10
 
-DISK="${1:-/storage/win10.qcow2}"
-ISO="${2:-}"
-MEMORY="${MEMORY:-4G}"
+# Configuration (with defaults)
 CPUS="${CPUS:-2}"
+MEMORY="${MEMORY:-4G}"
 VNC_PORT="${VNC_PORT:-0}"
+DISK="${DISK:-/storage/windows.img}"
+UEFI_CODE="${UEFI_CODE:-/storage/windows.rom}"
+UEFI_VARS="${UEFI_VARS:-/storage/windows.vars}"
+DATA_DISK="${DATA_DISK:-/storage/data.img}"
+ENABLE_TAP="${ENABLE_TAP:-0}"
 
-# Create disk if not exists
+# Create storage directory
+mkdir -p /run/shm
+
+# Ensure QCOW2 disk exists
 if [ ! -f "$DISK" ]; then
-    echo "Creating disk image: $DISK"
+    echo "[*] Creating main disk: $DISK (64GB)"
     qemu-img create -f qcow2 "$DISK" 64G
 fi
 
-# Build QEMU command
-QEMU_CMD="qemu-system-x86_64 \
-    -enable-kvm \
-    -cpu host \
-    -smp $CPUS \
-    -m $MEMORY \
-    -drive file=$DISK,format=qcow2,if=virtio,cache=writeback \
-    -vga virtio \
-    -display vnc=:$VNC_PORT \
-    -device virtio-net-pci,netdev=net0 \
-    -netdev user,id=net0,hostfwd=tcp::3389-:3389,hostfwd=tcp::5985-:5985 \
-    -device usb-ehci \
-    -device usb-tablet \
-    -boot menu=on"
-
-# Add ISO if provided
-if [ -n "$ISO" ] && [ -f "$ISO" ]; then
-    QEMU_CMD="$QEMU_CMD -cdrom $ISO -boot d"
+# Ensure data disk exists (optional)
+if [ "$DATA_DISK" != "none" ] && [ ! -f "$DATA_DISK" ]; then
+    echo "[*] Creating data disk: $DATA_DISK (256GB)"
+    qemu-img create -f raw "$DATA_DISK" 256G
 fi
 
-echo "Starting Windows 10 VM..."
-echo "VNC: localhost:590$VNC_PORT"
-echo "RDP: localhost:3389 (after Windows install)"
-echo ""
-echo "Press Ctrl+C to stop"
+# Base QEMU command with optimizations
+QEMU="qemu-system-x86_64 -nodefaults"
+QEMU="$QEMU -cpu host,kvm=on,l3-cache=on,+hypervisor,migratable=no"
+QEMU="$QEMU -smp $CPUS,sockets=1,dies=1,cores=$CPUS,threads=1"
+QEMU="$QEMU -m $MEMORY"
+QEMU="$QEMU -machine type=q35,smm=off,graphics=off,vmport=off,dump-guest-core=off,hpet=off,accel=kvm"
+QEMU="$QEMU -enable-kvm"
+QEMU="$QEMU -global kvm-pit.lost_tick_policy=discard"
 
-exec $QEMU_CMD
+# Display (VNC with WebSocket)
+QEMU="$QEMU -display vnc=:$VNC_PORT,websocket=$((5700 + VNC_PORT))"
+QEMU="$QEMU -vga virtio"
+
+# Monitoring
+QEMU="$QEMU -monitor telnet:localhost:$((7100 + VNC_PORT)),server,nowait,nodelay"
+QEMU="$QEMU -daemonize"
+QEMU="$QEMU -D /run/shm/qemu.log"
+QEMU="$QEMU -pidfile /run/shm/qemu.pid"
+QEMU="$QEMU -name windows,process=windows,debug-threads=on"
+
+# Serial and USB
+QEMU="$QEMU -serial pty"
+QEMU="$QEMU -device qemu-xhci,id=xhci,p2=7,p3=7"
+QEMU="$QEMU -device usb-tablet"
+
+# Networking
+if [ "$ENABLE_TAP" = "1" ]; then
+    # TAP networking (requires setup)
+    QEMU="$QEMU -netdev tap,id=hostnet0,ifname=qemu,script=no,downscript=no"
+    QEMU="$QEMU -device virtio-net-pci,id=net0,netdev=hostnet0,romfile=,mac=02:4C:BB:C9:5B:42"
+else
+    # User networking (simpler, good for most cases)
+    QEMU="$QEMU -netdev user,id=hostnet0"
+    QEMU="$QEMU -device virtio-net-pci,id=net0,netdev=hostnet0,romfile="
+fi
+
+# Main disk (QCOW2 with virtio-scsi for better performance)
+QEMU="$QEMU -object iothread,id=io0"
+QEMU="$QEMU -drive file=$DISK,id=drive0,format=qcow2,cache=none,aio=native,discard=on,detect-zeroes=on,if=none"
+QEMU="$QEMU -device virtio-scsi-pci,id=scsi0,bus=pcie.0,addr=0x8,iothread=io0"
+QEMU="$QEMU -device scsi-hd,drive=drive0,bus=scsi0.0,channel=0,scsi-id=0,lun=0,rotation_rate=1,bootindex=1"
+
+# Data disk (if enabled)
+if [ "$DATA_DISK" != "none" ] && [ -f "$DATA_DISK" ]; then
+    QEMU="$QEMU -object iothread,id=io1"
+    QEMU="$QEMU -drive file=$DATA_DISK,id=data0,format=raw,cache=none,aio=native,discard=on,detect-zeroes=on,if=none"
+    QEMU="$QEMU -device virtio-scsi-pci,id=scsi1,bus=pcie.0,addr=0xa,iothread=io1"
+    QEMU="$QEMU -device scsi-hd,drive=data0,bus=scsi1.0,channel=0,scsi-id=0,lun=0,rotation_rate=1,bootindex=3"
+fi
+
+# UEFI firmware
+if [ -f "$UEFI_CODE" ] && [ -f "$UEFI_VARS" ]; then
+    QEMU="$QEMU -drive file=$UEFI_CODE,if=pflash,unit=0,format=raw,readonly=on"
+    QEMU="$QEMU -drive file=$UEFI_VARS,if=pflash,unit=1,format=raw"
+fi
+
+# RTC and power management
+QEMU="$QEMU -rtc base=localtime"
+QEMU="$QEMU -global ICH9-LPC.disable_s3=1"
+QEMU="$QEMU -global ICH9-LPC.disable_s4=1"
+
+# Random number generation
+QEMU="$QEMU -object rng-random,id=objrng0,filename=/dev/urandom"
+QEMU="$QEMU -device virtio-rng-pci,rng=objrng0,id=rng0,bus=pcie.0"
+
+# ISO support (for installation)
+if [ $# -gt 0 ] && [ -f "$1" ]; then
+    QEMU="$QEMU -cdrom $1 -boot d"
+fi
+
+echo "[*] Starting Windows 10 VM..."
+echo "[*] CPUs: $CPUS | Memory: $MEMORY"
+echo "[*] VNC: :$VNC_PORT | WebSocket: :$((5700 + VNC_PORT))"
+echo "[*] Monitor: localhost:$((7100 + VNC_PORT)) (telnet)"
+echo "[*] Log: /run/shm/qemu.log"
+echo "[*] PID: /run/shm/qemu.pid"
+
+exec $QEMU
 EOF
 chmod +x /usr/local/bin/win10
 
 # Create disk helper
 RUN cat > /usr/local/bin/create-disk << 'EOF'
 #!/bin/sh
-# Create QCOW2 disk image
-# Usage: create-disk [size] [path]
+# Create disk image (QCOW2 or RAW)
+# Usage: create-disk [size] [path] [format]
 
 SIZE="${1:-64G}"
 PATH="${2:-/storage/disk.qcow2}"
+FORMAT="${3:-qcow2}"
 
-qemu-img create -f qcow2 "$PATH" "$SIZE"
-echo "Created: $PATH ($SIZE)"
+echo "[*] Creating $FORMAT disk: $PATH ($SIZE)"
+qemu-img create -f "$FORMAT" "$PATH" "$SIZE"
+echo "[+] Created: $PATH"
 EOF
 chmod +x /usr/local/bin/create-disk
+
+# Create utility script for Windows 10 setup
+RUN cat > /usr/local/bin/setup-uefi << 'EOF'
+#!/bin/sh
+# Setup UEFI firmware files for Windows 10
+# This downloads or uses system firmware
+
+UEFI_DIR="/storage"
+
+echo "[*] Setting up UEFI firmware..."
+
+# Check if firmware exists
+if [ -f "$UEFI_DIR/windows.rom" ] && [ -f "$UEFI_DIR/windows.vars" ]; then
+    echo "[+] Firmware found at $UEFI_DIR"
+    exit 0
+fi
+
+# For production: these should be provided by user
+echo "[!] UEFI firmware files not found."
+echo "[!] You need to provide:"
+echo "    - $UEFI_DIR/windows.rom (OVMF_CODE, UEFI firmware)"
+echo "    - $UEFI_DIR/windows.vars (OVMF_VARS, UEFI variables)"
+echo ""
+echo "Download from: https://github.com/tianocore/edk2/releases"
+EOF
+chmod +x /usr/local/bin/setup-uefi
 
 # Volume for storage
 VOLUME ["/storage"]
