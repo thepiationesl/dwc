@@ -16,24 +16,27 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 
-  # Alpine FVC - QEMU for Windows 10 (Manual Start)
+  # Windows VM - dockur/windows compatible (Manual Mode)
   # Usage:
-  #   docker exec -it dwc-alpine-fvc fvc-setup  # Download ISO, drivers, create disk
-  #   docker exec -it dwc-alpine-fvc fvc-start  # Start QEMU
-  alpine-fvc:
+  #   docker exec -it dwc-vm vm-setup   # Download ISO, drivers, create disk
+  #   docker exec -it dwc-vm vm-start   # Start QEMU
+  #   docker exec -it dwc-vm vm-stop    # Stop VM gracefully
+  #   docker exec -it dwc-vm vm-status  # Check status
+  windows:
     build:
       context: .
-      dockerfile: dev/alpine/Dockerfile.fvc
-    image: dwc/alpine-fvc:latest
-    container_name: dwc-alpine-fvc
+      dockerfile: dev/vm/Dockerfile
+    image: dwc/windows:latest
+    container_name: dwc-vm
     environment:
-      - VERSION=win10x64
+      - VERSION=10
       - LANGUAGE=Chinese
       - VMX=Y
       - HV=N
       - DISK_SIZE=45G
       - CPU_CORES=6
       - RAM_SIZE=16G
+      - MANUAL=Y
       - ARGUMENTS=-cpu host,-hypervisor,+vmx
     devices:
       - /dev/kvm:/dev/kvm

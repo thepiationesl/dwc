@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+. /run/helpers.sh
+
+STORAGE="/storage"
+QEMU_PID="/run/shm/qemu.pid"
+QEMU_LOG="/run/shm/qemu.log"
+
+echo "======================================"
+echo "  DWC Windows VM Status"
+echo "======================================"
+echo ""
+
+# VM Status
+echo "VM Status:"
+if [ -f "$QEMU_PID" ]; then
+    local pid
+    pid=$(<"$QEMU_PID")
+    if isAlive "$pid"; then
+        echo "  State:     RUNNING (PID: $pid)"
+        
+        # Get process info
+        local mem
+        mem=$(ps -o rss= -p "$pid" 2>/dev/null | awk '{printf "%.0f MB", $1/1024}')
+        echo "  Memory:    $mem"
+        
+        local uptime
+        uptime=$(ps -o etime= -p "$pid" 2>/dev/null | tr -d ' ')
+        echo "  Uptime:    $uptime"
+    else
+        echo "  State:     STOPPED (stale PID)"
+    fi
+else
+    echo "  State:     STOPPED"
+fi
+echo ""
+
+# Storage
+echo "Storage:"
+if [ -f "$STORAGE/windows.img" ]; then
+    local size
+    size=$(du -h "$STORAGE/windows.img" 2>/dev/null | cut -f1)
+    local vsize
+    vsize=$(qemu-img info "$STORAGE/windows.img" 2>/dev/null | grep "virtual size" | awk '{print $3, $4}')
+    echo "  Disk:      $STORAGE/windows.img ($size / $vsize)"
+else
+    echo "  Disk:      Not created"
+fi
+
+if [ -f "$STORAGE/windows.boot" ]; then
+    echo "  Status:    Installed"
+else
+    echo "  Status:    Not installed"
+fi
+echo ""
+
+# Network
+echo "Network:"
+if ip link show qemu &>/dev/null; then
+    local ip
+    ip=$(ip addr show qemu 2>/dev/null | grep 'inet ' | awk '{print $2}')
+    echo "  TAP:       qemu ($ip)"
+else
+    echo "  TAP:       Not configured (user-mode)"
+fi
+
+# Check Samba
+if pgrep -x smbd &>/dev/null; then
+    echo "  Samba:     Running (\\\\172.20.0.1\\shared)"
+else
+    echo "  Samba:     Not running"
+fi
+echo ""
+
+# Endpoints
+echo "Endpoints:"
+echo "  VNC:       :0 (localhost:5900)"
+echo "  WebSocket: localhost:5700"
+echo "  Monitor:   localhost:7100"
+echo "  RDP:       localhost:3389"
+echo ""
+
+# Recent logs
+if [ -f "$QEMU_LOG" ] && [ -s "$QEMU_LOG" ]; then
+    echo "Recent Log:"
+    tail -5 "$QEMU_LOG" | sed 's/^/  /'
+    echo ""
+fi
