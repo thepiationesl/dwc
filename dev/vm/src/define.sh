@@ -31,6 +31,49 @@ parseVersion() {
     VERSION=$(expr "$VERSION" : "^\ *\(.*[^ ]\)\ *$")
     [ -z "$VERSION" ] && VERSION="win10x64"
 
+    # Handle edition specifications
+    case "${VERSION,,}" in
+        *pro*workstation*|*ws*|*workstation*)
+            # Windows 10/11 Pro Workstation
+            BASE_VERSION=$(echo "$VERSION" | sed -E 's/(pro.*workstation|ws|workstation.*)//gi' | sed -E 's/[^0-9]//g')
+            if [[ "$BASE_VERSION" == "11" ]]; then
+                VERSION="win11x64-pro-workstation"
+            else
+                VERSION="win10x64-pro-workstation"
+            fi
+            ;;
+        *pro*|*professional*)
+            # Windows 10/11 Pro
+            BASE_VERSION=$(echo "$VERSION" | sed -E 's/(pro.*|professional.*)//gi' | sed -E 's/[^0-9]//g')
+            if [[ "$BASE_VERSION" == "11" ]]; then
+                VERSION="win11x64-pro"
+            else
+                VERSION="win10x64-pro"
+            fi
+            ;;
+        *enterprise*|*eval*)
+            # Handled in main case below
+            ;;
+        *home*)
+            # Windows 10/11 Home
+            BASE_VERSION=$(echo "$VERSION" | sed -E 's/(home.*)//gi' | sed -E 's/[^0-9]//g')
+            if [[ "$BASE_VERSION" == "11" ]]; then
+                VERSION="win11x64-home"
+            else
+                VERSION="win10x64-home"
+            fi
+            ;;
+        *education*|*edu*)
+            # Windows 10/11 Education
+            BASE_VERSION=$(echo "$VERSION" | sed -E 's/(education.*|edu.*)//gi' | sed -E 's/[^0-9]//g')
+            if [[ "$BASE_VERSION" == "11" ]]; then
+                VERSION="win11x64-education"
+            else
+                VERSION="win10x64-education"
+            fi
+            ;;
+    esac
+
     case "${VERSION,,}" in
         "11" | "11p" | "win11" | "pro11" | "win11p" | "windows11" | "windows 11" )
             VERSION="win11x64" ;;
@@ -55,6 +98,26 @@ parseVersion() {
             VERSION="win2022-eval" ;;
         "2019" | "win2019" | "server2019" )
             VERSION="win2019-eval" ;;
+        # Pro Workstation editions
+        "win10x64-pro-workstation" )
+            VERSION="win10x64-pro-workstation" ;;
+        "win11x64-pro-workstation" )
+            VERSION="win11x64-pro-workstation" ;;
+        # Pro editions
+        "win10x64-pro" )
+            VERSION="win10x64-pro" ;;
+        "win11x64-pro" )
+            VERSION="win11x64-pro" ;;
+        # Home editions
+        "win10x64-home" )
+            VERSION="win10x64-home" ;;
+        "win11x64-home" )
+            VERSION="win11x64-home" ;;
+        # Education editions
+        "win10x64-education" )
+            VERSION="win10x64-education" ;;
+        "win11x64-education" )
+            VERSION="win11x64-education" ;;
     esac
 
     return 0

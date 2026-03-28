@@ -130,7 +130,7 @@ start_novnc() {
         /usr/share/novnc/utils/novnc_proxy \
             --vnc localhost:5901 \
             --listen "$NOVNC_PORT" \
-            --web /usr/share/novnc &
+            --web /usr/share/novnc/custom &
         
         log_info "noVNC started on port $NOVNC_PORT"
     fi

@@ -140,7 +140,7 @@ RUN cd /opt/audio-bridge && npm install --production && \
     chmod +x /opt/audio-bridge/audio-bridge.sh
 
 # Copy noVNC custom pages
-COPY skel/novnc /usr/share/novnc/custom/
+COPY novnc /usr/share/novnc/custom/
 
 # Create config directory and initialize
 RUN mkdir -p ${CONFIG_DIR} && \

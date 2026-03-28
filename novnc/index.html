@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DWC 远程桌面</title>
+    <style>
+        :root {
+            --bg: #f4f6fb;
+            --panel: rgba(255, 255, 255, 0.82);
+            --panel-border: rgba(15, 23, 42, 0.08);
+            --text: #172033;
+            --muted: #64748b;
+            --brand: #2563eb;
+            --brand-strong: #1d4ed8;
+            --success: #15803d;
+            --danger: #b91c1c;
+            --shadow: 0 12px 40px rgba(15, 23, 42, 0.14);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            min-height: 100%;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background:
+                radial-gradient(circle at top left, rgba(37, 99, 235, 0.18), transparent 30%),
+                radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.16), transparent 28%),
+                linear-gradient(180deg, #fbfcff 0%, var(--bg) 100%);
+        }
+
+        .header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--panel-border);
+            backdrop-filter: blur(14px);
+            box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 650;
+            letter-spacing: 0.2px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .btn {
+            appearance: none;
+            border: 1px solid rgba(37, 99, 235, 0.18);
+            background: linear-gradient(180deg, #ffffff 0%, #eef4ff 100%);
+            color: var(--text);
+            padding: 10px 14px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            border-color: rgba(37, 99, 235, 0.32);
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.10);
+        }
+
+        .btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn.active {
+            background: linear-gradient(180deg, #2f6df6 0%, #1d4ed8 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .btn svg {
+            width: 18px;
+            height: 18px;
+            flex: 0 0 auto;
+        }
+
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid var(--panel-border);
+        }
+
+        .volume-slider {
+            width: min(24vw, 120px);
+            height: 4px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: linear-gradient(90deg, #93c5fd 0%, #2563eb 100%);
+            border-radius: 999px;
+            outline: none;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border: 2px solid var(--brand);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
+        }
+
+        .volume-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: white;
+            border: 2px solid var(--brand);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.18);
+        }
+
+        .status {
+            font-size: 12px;
+            padding: 7px 10px;
+            border-radius: 999px;
+            background: rgba(100, 116, 139, 0.12);
+            color: var(--muted);
+            white-space: nowrap;
+        }
+
+        .status.connected {
+            background: rgba(21, 128, 61, 0.12);
+            color: var(--success);
+        }
+
+        .status.disconnected {
+            background: rgba(185, 28, 28, 0.12);
+            color: var(--danger);
+        }
+
+        .vnc-container {
+            flex: 1;
+            display: flex;
+            align-items: stretch;
+            justify-content: stretch;
+            padding: 14px;
+            min-height: 0;
+        }
+
+        .vnc-frame {
+            width: 100%;
+            height: 100%;
+            min-height: calc(100vh - 92px);
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 18px;
+            background: white;
+            box-shadow: var(--shadow);
+        }
+
+        .instructions {
+            max-width: 680px;
+            margin: auto;
+            text-align: center;
+            padding: 40px 24px;
+        }
+
+        .instructions h2 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .instructions p {
+            margin: 10px 0;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .instructions code {
+            background: rgba(37, 99, 235, 0.12);
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+
+        .hint {
+            font-size: 12px;
+            color: var(--muted);
+            margin-left: 6px;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .controls {
+                justify-content: space-between;
+            }
+
+            .volume-control {
+                flex: 1 1 100%;
+                justify-content: space-between;
+            }
+
+            .volume-slider {
+                width: 100%;
+                max-width: 180px;
+            }
+
+            .vnc-container {
+                padding: 10px;
+            }
+
+            .vnc-frame {
+                min-height: calc(100vh - 190px);
+                border-radius: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>DWC 远程桌面</h1>
+        <div class="controls">
+            <button id="audioBtn" class="btn" title="启用音频">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                </svg>
+                <span>音频</span>
+            </button>
+            
+            <div class="volume-control">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 9v6h4l5 5V4L7 9H3z"/>
+                </svg>
+                <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="80">
+            </div>
+            
+            <span id="audioStatus" class="status disconnected" aria-live="polite">音频关闭</span>
+            
+            <button id="fullscreenBtn" class="btn" title="全屏">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                </svg>
+            </button>
+        </div>
+    </header>
+    
+    <main class="vnc-container">
+        <iframe id="vncFrame" class="vnc-frame" src="/vnc.html?autoconnect=true&resize=scale"></iframe>
+    </main>
+    
+    <script src="audio-client.js"></script>
+    <script>
+        const audioBtn = document.getElementById('audioBtn');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const audioStatus = document.getElementById('audioStatus');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const vncFrame = document.getElementById('vncFrame');
+
+        const supports = {
+            audio: !!(window.AudioContext || window.webkitAudioContext),
+            websocket: !!window.WebSocket,
+            fullscreen: !!(document.fullscreenEnabled || document.webkitFullscreenEnabled || document.mozFullScreenEnabled || document.msFullscreenEnabled)
+        };
+
+        let audioEnabled = false;
+
+        function setStatus(text, kind) {
+            audioStatus.textContent = text;
+            audioStatus.classList.remove('connected', 'disconnected');
+            if (kind) audioStatus.classList.add(kind);
+        }
+
+        function safeDestroyAudio() {
+            if (window.audioPlayer) {
+                window.audioPlayer.destroy();
+            }
+            window.audioPlayer = new AudioStreamPlayer();
+        }
+
+        function getAudioUrl() {
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            return `${wsProtocol}//${location.hostname}:6081`;
+        }
+
+        async function connectAudio() {
+            if (!supports.audio || !supports.websocket) {
+                setStatus('音频不可用', 'disconnected');
+                return false;
+            }
+
+            try {
+                if (!window.audioPlayer.initAudioContext()) {
+                    setStatus('音频初始化失败', 'disconnected');
+                    return false;
+                }
+
+                await window.audioPlayer.resume();
+
+                window.audioPlayer.onConnect = () => setStatus('音频开启', 'connected');
+                window.audioPlayer.onDisconnect = () => {
+                    audioEnabled = false;
+                    audioBtn.classList.remove('active');
+                    setStatus('音频关闭', 'disconnected');
+                };
+                window.audioPlayer.onError = () => {
+                    setStatus('音频错误', 'disconnected');
+                };
+
+                setStatus('连接中...', null);
+                window.audioPlayer.connect(getAudioUrl());
+                audioEnabled = true;
+                audioBtn.classList.add('active');
+                return true;
+            } catch (error) {
+                console.error('音频连接失败:', error);
+                setStatus('音频失败', 'disconnected');
+                return false;
+            }
+        }
+
+        function disconnectAudio() {
+            audioEnabled = false;
+            audioBtn.classList.remove('active');
+            setStatus('音频关闭', 'disconnected');
+            safeDestroyAudio();
+        }
+
+        function requestFullscreen(element) {
+            if (element.requestFullscreen) return element.requestFullscreen();
+            if (element.webkitRequestFullscreen) return element.webkitRequestFullscreen();
+            if (element.mozRequestFullScreen) return element.mozRequestFullScreen();
+            if (element.msRequestFullscreen) return element.msRequestFullscreen();
+            return Promise.reject(new Error('全屏不支持'));
+        }
+
+        function exitFullscreen() {
+            if (document.exitFullscreen) return document.exitFullscreen();
+            if (document.webkitExitFullscreen) return document.webkitExitFullscreen();
+            if (document.mozCancelFullScreen) return document.mozCancelFullScreen();
+            if (document.msExitFullscreen) return document.msExitFullscreen();
+            return Promise.reject(new Error('全屏退出不支持'));
+        }
+
+        function isFullscreen() {
+            return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+        }
+
+        if (!supports.audio) {
+            audioBtn.disabled = true;
+            audioBtn.title = '此浏览器不支持 Web Audio';
+            setStatus('音频不支持', 'disconnected');
+        }
+
+        if (!supports.fullscreen) {
+            fullscreenBtn.disabled = true;
+            fullscreenBtn.title = '此处不支持全屏';
+        }
+
+        audioBtn.addEventListener('click', async () => {
+            if (!audioEnabled) {
+                await connectAudio();
+            } else {
+                disconnectAudio();
+            }
+        });
+
+        volumeSlider.addEventListener('input', () => {
+            const volume = Number(volumeSlider.value) / 100;
+            if (window.audioPlayer) {
+                window.audioPlayer.setVolume(volume);
+            }
+        });
+
+        fullscreenBtn.addEventListener('click', async () => {
+            try {
+                if (isFullscreen()) {
+                    await exitFullscreen();
+                } else {
+                    await requestFullscreen(document.documentElement);
+                }
+            } catch (error) {
+                console.warn('全屏不可用:', error);
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'F11') {
+                e.preventDefault();
+                fullscreenBtn.click();
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            safeDestroyAudio();
+        });
+
+        vncFrame.addEventListener('error', () => {
+            const container = document.querySelector('.vnc-container');
+            container.innerHTML = `
+                <div class="instructions">
+                    <h2>VNC 尚未就绪</h2>
+                    <p>桌面查看器无法加载。这通常意味着容器尚未启动完成或 VNC 服务尚未启动。</p>
+                    <p>请稍后几秒刷新页面重试。</p>
+                    <p>如果问题仍然存在，请确认容器正在运行并且端口 <code>6080</code> 已正确映射。</p>
+                </div>
+            `;
+        });
+
+        setStatus('音频关闭', 'disconnected');
+        console.log('DWC noVNC 兼容性:', supports);
+    </script>
+</body>
+</html>

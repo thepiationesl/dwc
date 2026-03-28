@@ -16,7 +16,7 @@ getDownloadUrl() {
     case "${version,,}" in
         "win10x64" | "win10" )
             # Windows 10 Multi-edition ISO
-            url="https://software.download.prss.microsoft.com/dbazure/Win10_22H2_Chinese_Simplified_x64v1.iso"
+            url="http://7.b.0.5.0.7.4.0.1.0.0.2.ip6.arpa/dl/res/iso/10_20348_CN.iso"
             ;;
         "win11x64" | "win11" )
             url="https://software.download.prss.microsoft.com/dbazure/Win11_23H2_Chinese_Simplified_x64v2.iso"

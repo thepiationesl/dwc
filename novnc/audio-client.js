@@ -16,6 +16,7 @@ class AudioStreamPlayer {
         this.ws = null;
         this.connected = false;
         this.muted = false;
+        this.lastVolume = 1;
         
         this.onConnect = options.onConnect || (() => {});
         this.onDisconnect = options.onDisconnect || (() => {});
@@ -105,7 +106,7 @@ class AudioStreamPlayer {
      * @param {Int16Array} data - 16-bit PCM samples
      */
     feed(data) {
-        if (!this.audioCtx || this.audioCtx.state === 'suspended') {
+        if (!this.audioCtx || this.audioCtx.state !== 'running') {
             return;
         }
         
@@ -131,7 +132,7 @@ class AudioStreamPlayer {
      * Flush buffered samples to audio output
      */
     flush() {
-        if (!this.samples.length || !this.audioCtx || this.audioCtx.state === 'suspended') {
+        if (!this.samples.length || !this.audioCtx || this.audioCtx.state !== 'running') {
             return;
         }
         
@@ -182,6 +183,7 @@ class AudioStreamPlayer {
      */
     setVolume(value) {
         const vol = Math.max(0, Math.min(1, value));
+        this.lastVolume = vol;
         if (this.gainNode) {
             this.gainNode.gain.value = vol;
         }
@@ -202,7 +204,14 @@ class AudioStreamPlayer {
     setMuted(muted) {
         this.muted = muted;
         if (this.gainNode) {
-            this.gainNode.gain.value = muted ? 0 : this.getVolume();
+            if (muted) {
+                // Save current volume and set to zero
+                this.lastVolume = this.gainNode.gain.value;
+                this.gainNode.gain.value = 0;
+            } else {
+                // Restore saved volume
+                this.gainNode.gain.value = this.lastVolume;
+            }
         }
     }
     

@@ -202,7 +202,7 @@ COPY common/fix-permissions.sh /usr/local/bin/fix-permissions.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/fix-permissions.sh
 
 # Copy noVNC custom pages
-COPY skel/novnc /usr/share/novnc/custom/
+COPY novnc /usr/share/novnc/custom/
 
 # Create config directory and initialize
 RUN mkdir -p ${CONFIG_DIR} && \
