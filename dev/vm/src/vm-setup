@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Load modules
+cd /run
+. /run/helpers.sh
+. /run/define.sh
+. /run/disk.sh
+. /run/install.sh
+
+STORAGE="/storage"
+
+echo "======================================"
+echo "  DWC Windows VM Setup"
+echo "======================================"
+echo ""
+
+# Parse configuration
+parseVersion
+parseLanguage
+
+echo "Configuration:"
+echo "  VERSION:    $VERSION ($(printVersion "$VERSION"))"
+echo "  LANGUAGE:   $(getLanguage "$LANGUAGE" "name")"
+echo "  DISK_SIZE:  $DISK_SIZE"
+echo "  RAM_SIZE:   $RAM_SIZE"
+echo "  CPU_CORES:  $CPU_CORES"
+echo ""
+
+# Check for existing installation
+if [ -f "$STORAGE/windows.boot" ] && [ -f "$STORAGE/windows.img" ]; then
+    echo "Existing Windows installation detected!"
+    echo ""
+    read -p "Reinstall? This will backup the current installation. [y/N]: " confirm
+    if [[ "${confirm,,}" != "y"* ]]; then
+        echo "Setup cancelled."
+        exit 0
+    fi
+fi
+
+# Run setup
+echo ""
+echo "Starting setup..."
+echo ""
+
+# Extract drivers
+extractDrivers
+
+# Detect or download ISO
+detectCustom
+
+if [ -z "$CUSTOM" ]; then
+    local lang
+    lang=$(getLanguage "$LANGUAGE" "code")
+    BOOT="$STORAGE/${VERSION}_${lang}.iso"
+    
+    if [ ! -f "$BOOT" ] || [ ! -s "$BOOT" ]; then
+        echo "ISO not found. Downloading..."
+        downloadIso
+    else
+        echo "Using existing ISO: $BOOT"
+    fi
+else
+    BOOT="$CUSTOM"
+    echo "Using custom ISO: $BOOT"
+fi
+
+# Create disk
+createDisk "$STORAGE/windows.img" "$DISK_SIZE" "qcow2"
+
+# Setup EFI
+setupEfi
+
+echo ""
+echo "======================================"
+echo "  Setup Complete!"
+echo "======================================"
+echo ""
+echo "Files prepared:"
+[ -f "$BOOT" ] && echo "  - ISO: $BOOT"
+[ -f "$STORAGE/windows.img" ] && echo "  - Disk: $STORAGE/windows.img"
+[ -f "$STORAGE/windows.rom" ] && echo "  - UEFI: $STORAGE/windows.rom"
+echo ""
+echo "Run 'vm-start' to boot the virtual machine"
+echo "VNC will be available at :0 (port 5900)"
+echo ""
