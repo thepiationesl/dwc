@@ -1,39 +1,35 @@
-# Alpine FVC - QEMU Windows 10 Container
-# Style: dockur/windows compatible environment variables
-# Base: alpine:edge | Target size: < 200MB
-
+# ============================================================
+# DWC FVC - QEMU Windows Container (Manual Start)
+# Features: Auto-download, VirtIO drivers, Samba, TAP network
+# Base: alpine:edge | Target size: < 350MB
+# ============================================================
 FROM alpine:edge
 
 LABEL maintainer="DWC Project"
-LABEL description="Alpine QEMU container for Windows 10 (dockur/windows style)"
+LABEL description="QEMU Windows VM with auto-download, drivers, Samba (manual start)"
 
 # ============================================================
 # Environment Variables (dockur/windows compatible)
 # ============================================================
-ENV VERSION="10" \
+ENV VERSION="win10x64" \
     LANGUAGE="Chinese" \
     DISK_SIZE="64G" \
     CPU_CORES="2" \
     RAM_SIZE="4G" \
-    USERNAME="" \
-    PASSWORD="" \
-    # Network
-    DHCP="Y" \
-    # Virtualization flags
+    # Virtualization
     VMX="N" \
     HV="Y" \
     KVM="Y" \
+    # Network
+    DHCP="Y" \
     # Extra QEMU arguments
     ARGUMENTS="" \
     # Paths
     STORAGE="/storage" \
-    SHARED="/shared" \
-    # Internal
-    TZ="Asia/Shanghai" \
-    LANG="C.UTF-8"
+    SHARED="/shared"
 
 # ============================================================
-# Configure Alpine mirrors
+# Alpine mirrors
 # ============================================================
 RUN echo "http://mirrors.7.b.0.5.0.7.4.0.1.0.0.2.ip6.arpa/system/alpine/edge/main" > /etc/apk/repositories && \
     echo "http://mirrors.7.b.0.5.0.7.4.0.1.0.0.2.ip6.arpa/system/alpine/edge/community" >> /etc/apk/repositories
@@ -46,16 +42,24 @@ RUN apk add --no-cache \
     qemu-system-x86_64 \
     qemu-img \
     qemu-hw-usb-host \
+    # ISO/Archive tools
+    p7zip \
+    cabextract \
+    wimlib \
+    mtools \
+    cdrkit \
+    xorriso \
     # Networking
     iproute2 \
     iptables \
     dnsmasq \
     bridge-utils \
-    # Web VNC (noVNC)
+    socat \
+    # Web VNC
     novnc \
     py3-websockify \
     py3-numpy \
-    # SMB sharing
+    # SMB
     samba \
     # Utilities
     docker-cli \
@@ -63,290 +67,650 @@ RUN apk add --no-cache \
     bash \
     curl \
     wget \
+    jq \
     procps \
-    # System
+    udev \
     ca-certificates \
-    tzdata \
-    tini
+    tzdata
 
 # ============================================================
-# Clean up unnecessary QEMU firmware (reduce size)
+# Clean QEMU firmware (keep Windows essentials)
 # ============================================================
 RUN cd /usr/share/qemu && \
     mkdir -p /tmp/qemu-keep && \
-    # Keep essential firmware for Windows 10
     for f in bios-256k.bin efi-virtio.rom kvmvapic.bin vgabios-virtio.bin \
-             vgabios-stdvga.bin linuxboot_dma.bin efi-e1000.rom efi-e1000e.rom \
-             efi-pcnet.rom efi-rtl8139.rom; do \
-        cp -f "$f" /tmp/qemu-keep/ 2>/dev/null || true; \
-    done && \
-    rm -rf /usr/share/qemu/* && \
-    cp -f /tmp/qemu-keep/* /usr/share/qemu/ 2>/dev/null || true && \
-    rm -rf /tmp/qemu-keep && \
-    # Clean docs
-    rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/* /var/cache/apk/*
+             vgabios-stdvga.bin linuxboot_dma.bin vgabios-bochs-display.bin \
+             efi-e1000.rom efi-e1000e.rom efi-pcnet.rom efi-rtl8139.rom; do \
+        [ -f "$f" ] && cp "$f" /tmp/qemu-keep/; \
+    done; \
+    cp -r keymaps /tmp/qemu-keep/ 2>/dev/null || true; \
+    rm -rf /usr/share/qemu/*; \
+    cp -r /tmp/qemu-keep/* /usr/share/qemu/; \
+    rm -rf /tmp/qemu-keep /usr/share/doc/* /usr/share/man/* /var/cache/apk/*
 
 # ============================================================
 # Create directories
 # ============================================================
-RUN mkdir -p /storage /shared /run/qemu /var/log/qemu /opt/scripts
+RUN mkdir -p /storage /shared /run/qemu /var/log/qemu /opt/fvc
 
 # ============================================================
-# TAP network setup script
+# Common functions
 # ============================================================
-RUN cat > /opt/scripts/setup-network.sh << 'NETEOF'
+RUN cat > /opt/fvc/common.sh << 'EOF'
 #!/bin/bash
-set -e
+# Common functions for FVC
 
-# Create TAP interface
-if [ ! -c /dev/net/tun ]; then
-    echo "[!] /dev/net/tun not found, TAP networking unavailable"
+info()  { echo -e "\e[32m[*]\e[0m $1"; }
+warn()  { echo -e "\e[33m[!]\e[0m $1"; }
+error() { echo -e "\e[31m[x]\e[0m $1"; }
+
+VIRTIO_URL="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
+STORAGE="${STORAGE:-/storage}"
+SHARED="${SHARED:-/shared}"
+EOF
+
+# ============================================================
+# Download script (ISO from Microsoft)
+# ============================================================
+RUN cat > /opt/fvc/download.sh << 'EOF'
+#!/bin/bash
+source /opt/fvc/common.sh
+
+get_user_agent() {
+    local ver=$((124 + ($(date +%s) - 1710892800) / 2419200))
+    echo "Mozilla/5.0 (X11; Linux x86_64; rv:${ver}.0) Gecko/20100101 Firefox/${ver}.0"
+}
+
+get_language_code() {
+    case "${1,,}" in
+        "chinese"|"zh"|"zh-cn") echo "Chinese (Simplified)" ;;
+        "english"|"en"|"en-us") echo "English (United States)" ;;
+        "japanese"|"ja") echo "Japanese" ;;
+        "korean"|"ko") echo "Korean" ;;
+        *) echo "$1" ;;
+    esac
+}
+
+download_windows_iso() {
+    local version="${VERSION:-win10x64}"
+    local lang="${LANGUAGE:-Chinese}"
+    local ua=$(get_user_agent)
+    local language=$(get_language_code "$lang")
+    
+    info "Downloading Windows ISO..."
+    info "Version: $version | Language: $language"
+    
+    # Check if ISO already exists
+    local existing=$(find "$STORAGE" -maxdepth 1 -name "*.iso" -type f | head -1)
+    if [ -n "$existing" ]; then
+        info "ISO already exists: $existing"
+        echo "$existing"
+        return 0
+    fi
+    
+    local windows_version=""
+    local url=""
+    
+    case "${version,,}" in
+        "win11"*|"11") 
+            windows_version="11"
+            url="https://www.microsoft.com/en-us/software-download/windows11" ;;
+        "win10"*|"10") 
+            windows_version="10"
+            url="https://www.microsoft.com/en-us/software-download/windows10ISO" ;;
+        *) 
+            error "Unknown version: $version"
+            return 1 ;;
+    esac
+    
+    info "Fetching download page: $url"
+    
+    # Get session ID
+    local session_id=$(cat /proc/sys/kernel/random/uuid)
+    
+    # Get product edition ID
+    local page_html=$(curl -sL --max-time 30 -A "$ua" "$url")
+    local product_id=$(echo "$page_html" | grep -oP 'option value="\K[0-9]+' | head -1)
+    
+    if [ -z "$product_id" ]; then
+        error "Could not find product ID. Microsoft may have blocked automated downloads."
+        info "Please manually download the ISO and place it in $STORAGE/"
+        return 1
+    fi
+    
+    info "Product ID: $product_id"
+    
+    # Get SKU info
+    local profile="606624d44113"
+    local sku_url="https://www.microsoft.com/software-download-connector/api/getskuinformationbyproductedition?profile=$profile&ProductEditionId=$product_id&SKU=undefined&friendlyFileName=undefined&Locale=en-US&sessionID=$session_id"
+    
+    local sku_json=$(curl -sL --max-time 30 -A "$ua" -H "Referer: $url" "$sku_url")
+    local sku_id=$(echo "$sku_json" | jq -r ".Skus[] | select(.Language==\"$language\").Id" 2>/dev/null)
+    
+    if [ -z "$sku_id" ] || [ "$sku_id" = "null" ]; then
+        warn "Language $language not found, trying English..."
+        sku_id=$(echo "$sku_json" | jq -r '.Skus[] | select(.Language=="English (United States)").Id' 2>/dev/null)
+    fi
+    
+    if [ -z "$sku_id" ] || [ "$sku_id" = "null" ]; then
+        error "Could not get SKU ID"
+        info "Available languages:"
+        echo "$sku_json" | jq -r '.Skus[].Language' 2>/dev/null
+        return 1
+    fi
+    
+    info "SKU ID: $sku_id"
+    
+    # Get download link
+    local dl_url="https://www.microsoft.com/software-download-connector/api/GetProductDownloadLinksBySku?profile=$profile&ProductEditionId=undefined&SKU=$sku_id&friendlyFileName=undefined&Locale=en-US&sessionID=$session_id"
+    
+    local dl_json=$(curl -sL --max-time 30 -A "$ua" -H "Referer: $url" "$dl_url")
+    local iso_url=$(echo "$dl_json" | jq -r '.ProductDownloadOptions[] | select(.DownloadType==1).Uri' 2>/dev/null)
+    
+    if [ -z "$iso_url" ] || [ "$iso_url" = "null" ]; then
+        error "Could not get ISO download URL"
+        info "Response: $dl_json"
+        return 1
+    fi
+    
+    info "Download URL obtained!"
+    
+    # Download ISO
+    local iso_file="$STORAGE/windows${windows_version}.iso"
+    info "Downloading to: $iso_file"
+    info "This may take a while..."
+    
+    curl -L --progress-bar -o "$iso_file" "$iso_url" || {
+        error "Download failed"
+        rm -f "$iso_file"
+        return 1
+    }
+    
+    info "Download complete: $iso_file"
+    echo "$iso_file"
+}
+
+# Download VirtIO drivers
+download_virtio() {
+    local virtio_iso="$STORAGE/virtio-win.iso"
+    
+    if [ -f "$virtio_iso" ]; then
+        info "VirtIO drivers already downloaded"
+        return 0
+    fi
+    
+    info "Downloading VirtIO drivers..."
+    curl -L --progress-bar -o "$virtio_iso" "$VIRTIO_URL" || {
+        error "Failed to download VirtIO drivers"
+        return 1
+    }
+    
+    info "VirtIO drivers downloaded: $virtio_iso"
+}
+EOF
+chmod +x /opt/fvc/download.sh
+
+# ============================================================
+# Disk management
+# ============================================================
+RUN cat > /opt/fvc/disk.sh << 'EOF'
+#!/bin/bash
+source /opt/fvc/common.sh
+
+create_disk() {
+    local disk_file="${STORAGE}/windows.img"
+    local size="${DISK_SIZE:-64G}"
+    
+    if [ -f "$disk_file" ]; then
+        local current_size=$(qemu-img info "$disk_file" | grep "virtual size" | awk '{print $3}')
+        info "Disk exists: $disk_file ($current_size)"
+        return 0
+    fi
+    
+    info "Creating disk: $disk_file ($size)"
+    qemu-img create -f qcow2 "$disk_file" "$size" || {
+        error "Failed to create disk"
+        return 1
+    }
+    
+    info "Disk created successfully"
+}
+
+resize_disk() {
+    local disk_file="${STORAGE}/windows.img"
+    local new_size="${1:-$DISK_SIZE}"
+    
+    if [ ! -f "$disk_file" ]; then
+        error "Disk not found: $disk_file"
+        return 1
+    fi
+    
+    info "Resizing disk to $new_size..."
+    qemu-img resize "$disk_file" "$new_size" || {
+        error "Failed to resize disk"
+        return 1
+    }
+    
+    info "Disk resized. Run chkdsk inside Windows to expand the partition."
+}
+
+disk_info() {
+    local disk_file="${STORAGE}/windows.img"
+    
+    if [ ! -f "$disk_file" ]; then
+        error "Disk not found"
+        return 1
+    fi
+    
+    qemu-img info "$disk_file"
+}
+EOF
+chmod +x /opt/fvc/disk.sh
+
+# ============================================================
+# Network setup (TAP)
+# ============================================================
+RUN cat > /opt/fvc/network.sh << 'EOF'
+#!/bin/bash
+source /opt/fvc/common.sh
+
+setup_tap_network() {
+    # Check for tun device
+    if [ ! -c /dev/net/tun ]; then
+        warn "/dev/net/tun not available, TAP network disabled"
+        return 1
+    fi
+    
+    # Create TAP interface
+    if ! ip link show tap0 &>/dev/null; then
+        info "Creating TAP interface..."
+        ip tuntap add dev tap0 mode tap || return 1
+    fi
+    
+    ip link set tap0 up
+    ip addr add 172.20.0.1/24 dev tap0 2>/dev/null || true
+    
+    # Enable forwarding
+    echo 1 > /proc/sys/net/ipv4/ip_forward
+    
+    # NAT rules
+    iptables -t nat -C POSTROUTING -s 172.20.0.0/24 -j MASQUERADE 2>/dev/null || \
+        iptables -t nat -A POSTROUTING -s 172.20.0.0/24 -j MASQUERADE
+    
+    iptables -C FORWARD -i tap0 -j ACCEPT 2>/dev/null || \
+        iptables -A FORWARD -i tap0 -j ACCEPT
+    
+    iptables -C FORWARD -o tap0 -j ACCEPT 2>/dev/null || \
+        iptables -A FORWARD -o tap0 -j ACCEPT
+    
+    # DHCP server
+    if [[ "${DHCP:-Y}" == [Yy1]* ]]; then
+        pkill dnsmasq 2>/dev/null || true
+        dnsmasq --interface=tap0 \
+                --bind-interfaces \
+                --dhcp-range=172.20.0.100,172.20.0.200,12h \
+                --dhcp-option=option:router,172.20.0.1 \
+                --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 \
+                --log-facility=/var/log/qemu/dnsmasq.log &
+        info "DHCP server started"
+    fi
+    
+    info "TAP network ready: tap0 (172.20.0.1/24)"
+    return 0
+}
+
+get_network_args() {
+    if ip link show tap0 &>/dev/null 2>&1; then
+        # TAP mode
+        local mac="${MAC:-02:4C:BB:C9:5B:42}"
+        echo "-netdev tap,id=net0,ifname=tap0,script=no,downscript=no -device virtio-net-pci,netdev=net0,mac=$mac"
+    else
+        # User mode (fallback)
+        echo "-netdev user,id=net0,hostfwd=tcp::3389-:3389,hostfwd=udp::3389-:3389,smb=/shared -device virtio-net-pci,netdev=net0"
+    fi
+}
+EOF
+chmod +x /opt/fvc/network.sh
+
+# ============================================================
+# Samba setup
+# ============================================================
+RUN cat > /opt/fvc/samba.sh << 'EOF'
+#!/bin/bash
+source /opt/fvc/common.sh
+
+setup_samba() {
+    cat > /etc/samba/smb.conf << 'SMBCFG'
+[global]
+    workgroup = WORKGROUP
+    server string = DWC FVC
+    security = user
+    map to guest = Bad User
+    guest account = nobody
+    log file = /var/log/samba/%m.log
+    max log size = 50
+
+[shared]
+    path = /shared
+    browseable = yes
+    writable = yes
+    guest ok = yes
+    create mask = 0777
+    directory mask = 0777
+    force user = nobody
+SMBCFG
+
+    info "Samba configured for /shared"
+}
+
+start_samba() {
+    setup_samba
+    
+    if pgrep smbd > /dev/null; then
+        warn "Samba already running"
+        return 0
+    fi
+    
+    smbd -D
+    nmbd -D
+    
+    info "Samba started"
+    info "Access from Windows: \\\\172.20.0.1\\shared"
+}
+
+stop_samba() {
+    pkill smbd 2>/dev/null
+    pkill nmbd 2>/dev/null
+    info "Samba stopped"
+}
+EOF
+chmod +x /opt/fvc/samba.sh
+
+# ============================================================
+# QEMU command builder
+# ============================================================
+RUN cat > /opt/fvc/qemu.sh << 'EOF'
+#!/bin/bash
+source /opt/fvc/common.sh
+source /opt/fvc/network.sh
+
+build_qemu_cmd() {
+    local disk_file="${STORAGE}/windows.img"
+    local vnc_port="${VNC_PORT:-0}"
+    local cpus="${CPU_CORES:-2}"
+    local ram="${RAM_SIZE:-4G}"
+    
+    # CPU flags
+    local cpu_flags="host"
+    [[ "${KVM:-Y}" == [Yy1]* ]] && cpu_flags+=",kvm=on"
+    [[ "${VMX:-N}" == [Yy1]* ]] && cpu_flags+=",+vmx"
+    [[ "${HV:-Y}" == [Nn0]* ]] && cpu_flags+=",-hypervisor"
+    cpu_flags+=",l3-cache=on,migratable=no"
+    
+    # Handle custom ARGUMENTS with -cpu
+    local extra_args="${ARGUMENTS:-}"
+    if echo "$extra_args" | grep -q '\-cpu'; then
+        cpu_flags=$(echo "$extra_args" | grep -oP '(?<=-cpu )[^ ]+')
+        extra_args=$(echo "$extra_args" | sed 's/-cpu [^ ]*//')
+    fi
+    
+    # Base command
+    QEMU_CMD="qemu-system-x86_64 -nodefaults"
+    QEMU_CMD+=" -cpu $cpu_flags"
+    QEMU_CMD+=" -smp $cpus,sockets=1,cores=$cpus,threads=1"
+    QEMU_CMD+=" -m $ram"
+    QEMU_CMD+=" -machine type=q35,smm=off,vmport=off,dump-guest-core=off,hpet=off,accel=kvm"
+    QEMU_CMD+=" -enable-kvm"
+    QEMU_CMD+=" -global kvm-pit.lost_tick_policy=discard"
+    
+    # Display
+    QEMU_CMD+=" -display vnc=:${vnc_port},websocket=$((5700 + vnc_port))"
+    QEMU_CMD+=" -vga virtio"
+    
+    # Main disk
+    QEMU_CMD+=" -object iothread,id=io0"
+    QEMU_CMD+=" -drive file=$disk_file,id=drive0,format=qcow2,cache=none,aio=native,discard=on,detect-zeroes=on,if=none"
+    QEMU_CMD+=" -device virtio-scsi-pci,id=scsi0,iothread=io0"
+    QEMU_CMD+=" -device scsi-hd,drive=drive0,bus=scsi0.0,bootindex=1"
+    
+    # Windows ISO (if exists)
+    local win_iso=$(find "$STORAGE" -maxdepth 1 -name "*.iso" ! -name "virtio*" -type f | head -1)
+    if [ -n "$win_iso" ]; then
+        QEMU_CMD+=" -drive file=$win_iso,media=cdrom,index=0"
+    fi
+    
+    # VirtIO drivers ISO
+    local virtio_iso="$STORAGE/virtio-win.iso"
+    if [ -f "$virtio_iso" ]; then
+        QEMU_CMD+=" -drive file=$virtio_iso,media=cdrom,index=1"
+    fi
+    
+    # USB
+    QEMU_CMD+=" -device qemu-xhci,id=xhci"
+    QEMU_CMD+=" -device usb-tablet"
+    
+    # Network
+    QEMU_CMD+=" $(get_network_args)"
+    
+    # RTC and power
+    QEMU_CMD+=" -rtc base=localtime"
+    QEMU_CMD+=" -global ICH9-LPC.disable_s3=1"
+    QEMU_CMD+=" -global ICH9-LPC.disable_s4=1"
+    
+    # RNG
+    QEMU_CMD+=" -object rng-random,id=rng0,filename=/dev/urandom"
+    QEMU_CMD+=" -device virtio-rng-pci,rng=rng0"
+    
+    # Monitor
+    QEMU_CMD+=" -monitor telnet:localhost:$((7100 + vnc_port)),server,nowait,nodelay"
+    
+    # Extra arguments
+    [ -n "$extra_args" ] && QEMU_CMD+=" $extra_args"
+    
+    echo "$QEMU_CMD"
+}
+EOF
+chmod +x /opt/fvc/qemu.sh
+
+# ============================================================
+# User commands
+# ============================================================
+
+# fvc-setup: Download ISO, drivers, create disk
+RUN cat > /usr/local/bin/fvc-setup << 'EOF'
+#!/bin/bash
+source /opt/fvc/common.sh
+source /opt/fvc/download.sh
+source /opt/fvc/disk.sh
+
+echo "========================================"
+echo "  FVC Setup"
+echo "========================================"
+echo "  VERSION:   $VERSION"
+echo "  LANGUAGE:  $LANGUAGE"
+echo "  DISK_SIZE: $DISK_SIZE"
+echo "========================================"
+echo ""
+
+# Step 1: Download Windows ISO
+info "Step 1: Windows ISO"
+download_windows_iso || warn "ISO download failed, please provide manually"
+
+# Step 2: Download VirtIO drivers
+info "Step 2: VirtIO Drivers"
+download_virtio || warn "VirtIO download failed"
+
+# Step 3: Create disk
+info "Step 3: Create Disk"
+create_disk
+
+echo ""
+echo "========================================"
+echo "  Setup Complete!"
+echo "  Run 'fvc-start' to launch QEMU"
+echo "========================================"
+EOF
+chmod +x /usr/local/bin/fvc-setup
+
+# fvc-start: Start QEMU
+RUN cat > /usr/local/bin/fvc-start << 'EOF'
+#!/bin/bash
+source /opt/fvc/common.sh
+source /opt/fvc/network.sh
+source /opt/fvc/qemu.sh
+
+echo "========================================"
+echo "  FVC Start"
+echo "========================================"
+
+# Check disk
+if [ ! -f "${STORAGE}/windows.img" ]; then
+    error "Disk not found! Run 'fvc-setup' first."
     exit 1
 fi
 
-# Setup TAP
-ip tuntap add dev tap0 mode tap 2>/dev/null || true
-ip link set tap0 up
-ip addr add 172.20.0.1/24 dev tap0 2>/dev/null || true
+# Setup network
+info "Setting up network..."
+setup_tap_network || warn "TAP network failed, using user mode"
 
-# Enable IP forwarding
-echo 1 > /proc/sys/net/ipv4/ip_forward
+# Build command
+QEMU_CMD=$(build_qemu_cmd)
 
-# Setup NAT
-iptables -t nat -A POSTROUTING -s 172.20.0.0/24 -j MASQUERADE
-iptables -A FORWARD -i tap0 -j ACCEPT
-iptables -A FORWARD -o tap0 -j ACCEPT
+echo ""
+info "CPU:     ${CPU_CORES} cores"
+info "RAM:     ${RAM_SIZE}"
+info "VNC:     :${VNC_PORT:-0} (port $((5900 + ${VNC_PORT:-0})))"
+info "WS:      :$((5700 + ${VNC_PORT:-0}))"
+info "Monitor: localhost:$((7100 + ${VNC_PORT:-0}))"
+info "RDP:     localhost:3389 (after Windows install)"
+echo ""
+info "Command:"
+echo "$QEMU_CMD"
+echo ""
+info "Starting QEMU... (Ctrl+C to stop)"
+echo ""
 
-# Start dnsmasq for DHCP
-if [ "$DHCP" = "Y" ]; then
-    dnsmasq --interface=tap0 \
-            --bind-interfaces \
-            --dhcp-range=172.20.0.100,172.20.0.200,12h \
-            --dhcp-option=option:router,172.20.0.1 \
-            --dhcp-option=option:dns-server,8.8.8.8,8.8.4.4 \
-            --log-facility=/var/log/qemu/dnsmasq.log
-fi
+exec $QEMU_CMD
+EOF
+chmod +x /usr/local/bin/fvc-start
 
-echo "[+] TAP network configured: tap0 (172.20.0.1/24)"
-NETEOF
-chmod +x /opt/scripts/setup-network.sh
-
-# ============================================================
-# SMB sharing setup script
-# ============================================================
-RUN cat > /opt/scripts/setup-smb.sh << 'SMBEOF'
+# fvc-samba: Start Samba
+RUN cat > /usr/local/bin/fvc-samba << 'EOF'
 #!/bin/bash
+source /opt/fvc/common.sh
+source /opt/fvc/samba.sh
+start_samba
+EOF
+chmod +x /usr/local/bin/fvc-samba
 
-SMB_CONF="/etc/samba/smb.conf"
-
-cat > "$SMB_CONF" << 'SMBCFG'
-[global]
-   workgroup = WORKGROUP
-   server string = DWC Samba
-   security = user
-   map to guest = Bad User
-   guest account = nobody
-
-[shared]
-   path = /shared
-   browseable = yes
-   writable = yes
-   guest ok = yes
-   create mask = 0777
-   directory mask = 0777
-   force user = nobody
-   force group = nogroup
-SMBCFG
-
-# Start SMB if /shared is mounted
-if mountpoint -q /shared 2>/dev/null || [ -d /shared ]; then
-    smbd --foreground --no-process-group &
-    echo "[+] SMB sharing enabled: //host/shared"
-fi
-SMBEOF
-chmod +x /opt/scripts/setup-smb.sh
-
-# ============================================================
-# Main entrypoint script
-# ============================================================
-RUN cat > /opt/scripts/entrypoint.sh << 'ENTRYEOF'
+# fvc-stop: Stop QEMU gracefully
+RUN cat > /usr/local/bin/fvc-stop << 'EOF'
 #!/bin/bash
-set -e
+source /opt/fvc/common.sh
 
-echo "=============================================="
-echo "  DWC QEMU Windows Container"
-echo "=============================================="
-echo "  VERSION:    ${VERSION}"
-echo "  CPU_CORES:  ${CPU_CORES}"
-echo "  RAM_SIZE:   ${RAM_SIZE}"
-echo "  DISK_SIZE:  ${DISK_SIZE}"
-echo "=============================================="
+info "Sending ACPI shutdown..."
+echo "system_powerdown" | socat - TCP:localhost:7100 2>/dev/null || true
 
-# Setup TAP network
-/opt/scripts/setup-network.sh || echo "[!] TAP network setup failed, using user mode"
+sleep 3
 
-# Setup SMB
-/opt/scripts/setup-smb.sh &
-
-# Create disk if not exists
-DISK_FILE="${STORAGE}/windows.img"
-if [ ! -f "$DISK_FILE" ]; then
-    echo "[*] Creating disk: $DISK_FILE ($DISK_SIZE)"
-    qemu-img create -f qcow2 "$DISK_FILE" "$DISK_SIZE"
+if pgrep qemu-system > /dev/null; then
+    warn "VM still running, sending SIGTERM..."
+    pkill -TERM qemu-system
+    sleep 2
 fi
 
-# Build CPU flags
-CPU_FLAGS="host"
-if [ "$KVM" = "Y" ]; then
-    CPU_FLAGS="${CPU_FLAGS},kvm=on"
-fi
-if [ "$VMX" = "Y" ]; then
-    CPU_FLAGS="${CPU_FLAGS},+vmx"
-fi
-if [ "$HV" = "N" ]; then
-    CPU_FLAGS="${CPU_FLAGS},-hypervisor"
-fi
-CPU_FLAGS="${CPU_FLAGS},l3-cache=on,migratable=no"
-
-# Check for extra arguments
-if [ -n "$ARGUMENTS" ]; then
-    # If ARGUMENTS contains -cpu, extract and merge
-    if echo "$ARGUMENTS" | grep -q '\-cpu'; then
-        EXTRA_CPU=$(echo "$ARGUMENTS" | grep -oP '(?<=-cpu )[^ ]+')
-        CPU_FLAGS="${EXTRA_CPU}"
-        ARGUMENTS=$(echo "$ARGUMENTS" | sed 's/-cpu [^ ]*//')
-    fi
+if pgrep qemu-system > /dev/null; then
+    warn "Force killing..."
+    pkill -9 qemu-system
 fi
 
-# Determine network mode
-if [ -c /dev/net/tun ] && ip link show tap0 &>/dev/null; then
-    NET_ARGS="-netdev tap,id=net0,ifname=tap0,script=no,downscript=no"
-    NET_ARGS="$NET_ARGS -device virtio-net-pci,netdev=net0,mac=02:4C:BB:C9:5B:42"
-    echo "[+] Using TAP networking"
+info "VM stopped"
+EOF
+chmod +x /usr/local/bin/fvc-stop
+
+# fvc-status: Show status
+RUN cat > /usr/local/bin/fvc-status << 'EOF'
+#!/bin/bash
+source /opt/fvc/common.sh
+
+echo "=== FVC Status ==="
+echo ""
+
+# QEMU
+if pgrep qemu-system > /dev/null; then
+    info "QEMU: Running (PID: $(pgrep qemu-system))"
 else
-    NET_ARGS="-netdev user,id=net0,hostfwd=tcp::3389-:3389,hostfwd=udp::3389-:3389"
-    NET_ARGS="$NET_ARGS -device virtio-net-pci,netdev=net0"
-    echo "[+] Using User networking (NAT)"
+    warn "QEMU: Not running"
 fi
 
-# UEFI firmware (if available)
-UEFI_ARGS=""
-if [ -f "${STORAGE}/OVMF_CODE.fd" ]; then
-    if [ ! -f "${STORAGE}/OVMF_VARS.fd" ]; then
-        cp /usr/share/OVMF/OVMF_VARS.fd "${STORAGE}/" 2>/dev/null || true
-    fi
-    if [ -f "${STORAGE}/OVMF_VARS.fd" ]; then
-        UEFI_ARGS="-drive if=pflash,format=raw,readonly=on,file=${STORAGE}/OVMF_CODE.fd"
-        UEFI_ARGS="$UEFI_ARGS -drive if=pflash,format=raw,file=${STORAGE}/OVMF_VARS.fd"
-        echo "[+] UEFI boot enabled"
-    fi
+# Samba
+if pgrep smbd > /dev/null; then
+    info "Samba: Running"
+else
+    warn "Samba: Not running"
 fi
-
-# ISO detection
-ISO_ARGS=""
-for iso in "${STORAGE}"/*.iso; do
-    if [ -f "$iso" ]; then
-        ISO_ARGS="-cdrom $iso -boot d"
-        echo "[+] Found ISO: $iso"
-        break
-    fi
-done
-
-# SMB device for sharing
-SMB_ARGS=""
-if [ -d /shared ] && [ "$(ls -A /shared 2>/dev/null)" ]; then
-    SMB_ARGS="-device virtio-9p-pci,fsdev=shared,mount_tag=shared"
-    SMB_ARGS="$SMB_ARGS -fsdev local,id=shared,path=/shared,security_model=mapped-xattr"
-    echo "[+] 9P sharing enabled: /shared"
-fi
-
-# Start noVNC (Web interface on port 8006)
-websockify --web=/usr/share/novnc 8006 localhost:5900 &
-echo "[+] Web VNC: http://localhost:8006"
-
-# Build final QEMU command
-QEMU_CMD="qemu-system-x86_64 -nodefaults"
-QEMU_CMD="$QEMU_CMD -cpu $CPU_FLAGS"
-QEMU_CMD="$QEMU_CMD -smp $CPU_CORES,sockets=1,cores=$CPU_CORES,threads=1"
-QEMU_CMD="$QEMU_CMD -m $RAM_SIZE"
-QEMU_CMD="$QEMU_CMD -machine type=q35,smm=off,vmport=off,dump-guest-core=off,hpet=off,accel=kvm"
-QEMU_CMD="$QEMU_CMD -enable-kvm"
-QEMU_CMD="$QEMU_CMD -global kvm-pit.lost_tick_policy=discard"
-
-# Display
-QEMU_CMD="$QEMU_CMD -display vnc=:0,websocket=5700"
-QEMU_CMD="$QEMU_CMD -vga virtio"
-
-# Disk (virtio-scsi for performance)
-QEMU_CMD="$QEMU_CMD -object iothread,id=io0"
-QEMU_CMD="$QEMU_CMD -drive file=$DISK_FILE,id=drive0,format=qcow2,cache=none,aio=native,discard=on,detect-zeroes=on,if=none"
-QEMU_CMD="$QEMU_CMD -device virtio-scsi-pci,id=scsi0,iothread=io0"
-QEMU_CMD="$QEMU_CMD -device scsi-hd,drive=drive0,bus=scsi0.0,bootindex=1"
-
-# USB
-QEMU_CMD="$QEMU_CMD -device qemu-xhci,id=xhci"
-QEMU_CMD="$QEMU_CMD -device usb-tablet"
 
 # Network
-QEMU_CMD="$QEMU_CMD $NET_ARGS"
-
-# UEFI
-QEMU_CMD="$QEMU_CMD $UEFI_ARGS"
-
-# ISO
-QEMU_CMD="$QEMU_CMD $ISO_ARGS"
-
-# 9P Sharing
-QEMU_CMD="$QEMU_CMD $SMB_ARGS"
-
-# RTC
-QEMU_CMD="$QEMU_CMD -rtc base=localtime"
-QEMU_CMD="$QEMU_CMD -global ICH9-LPC.disable_s3=1"
-QEMU_CMD="$QEMU_CMD -global ICH9-LPC.disable_s4=1"
-
-# RNG
-QEMU_CMD="$QEMU_CMD -object rng-random,id=rng0,filename=/dev/urandom"
-QEMU_CMD="$QEMU_CMD -device virtio-rng-pci,rng=rng0"
-
-# Extra arguments
-if [ -n "$ARGUMENTS" ]; then
-    QEMU_CMD="$QEMU_CMD $ARGUMENTS"
+if ip link show tap0 &>/dev/null; then
+    info "Network: TAP (172.20.0.1)"
+else
+    warn "Network: Not configured"
 fi
 
-# Monitor
-QEMU_CMD="$QEMU_CMD -monitor telnet:localhost:7100,server,nowait,nodelay"
+# Disk
+if [ -f "$STORAGE/windows.img" ]; then
+    local size=$(du -h "$STORAGE/windows.img" | cut -f1)
+    info "Disk: $STORAGE/windows.img ($size)"
+else
+    warn "Disk: Not created"
+fi
+
+# ISO
+local iso_count=$(find "$STORAGE" -maxdepth 1 -name "*.iso" 2>/dev/null | wc -l)
+info "ISOs: $iso_count file(s)"
 
 echo ""
-echo "[*] Starting QEMU..."
-echo "[*] VNC: localhost:5900 | WebSocket: localhost:5700"
-echo "[*] Web: http://localhost:8006"
-echo "[*] Monitor: telnet localhost 7100"
-echo "[*] RDP: localhost:3389 (after Windows install)"
-echo ""
+EOF
+chmod +x /usr/local/bin/fvc-status
 
-# Execute QEMU (foreground)
-exec $QEMU_CMD
-ENTRYEOF
-chmod +x /opt/scripts/entrypoint.sh
+# fvc: Help
+RUN cat > /usr/local/bin/fvc << 'EOF'
+#!/bin/bash
+echo "========================================"
+echo "  DWC FVC - QEMU Windows Container"
+echo "========================================"
+echo ""
+echo "Commands:"
+echo "  fvc-setup   Download ISO, VirtIO drivers, create disk"
+echo "  fvc-start   Start QEMU (manual)"
+echo "  fvc-stop    Stop QEMU gracefully"
+echo "  fvc-samba   Start Samba server"
+echo "  fvc-status  Show VM status"
+echo ""
+echo "Environment:"
+echo "  VERSION=$VERSION"
+echo "  LANGUAGE=$LANGUAGE"
+echo "  CPU_CORES=$CPU_CORES"
+echo "  RAM_SIZE=$RAM_SIZE"
+echo "  DISK_SIZE=$DISK_SIZE"
+echo "  VMX=$VMX HV=$HV KVM=$KVM"
+echo "  ARGUMENTS=$ARGUMENTS"
+echo ""
+echo "Usage:"
+echo "  docker exec -it <container> fvc-setup"
+echo "  docker exec -it <container> fvc-start"
+echo ""
+EOF
+chmod +x /usr/local/bin/fvc
 
 # ============================================================
-# Volumes
+# Volumes & Ports
 # ============================================================
 VOLUME ["/storage", "/shared"]
+EXPOSE 5900 5700 7100 3389 3389/udp 445
 
 # ============================================================
-# Ports
-# ============================================================
-# 8006 - Web VNC (noVNC)
-# 5900 - VNC
-# 5700 - VNC WebSocket
-# 7100 - QEMU Monitor
-# 3389 - RDP
-EXPOSE 8006 5900 5700 7100 3389
-
-# ============================================================
-# Entrypoint
+# Keep container running (manual start)
 # ============================================================
 WORKDIR /storage
-ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["/opt/scripts/entrypoint.sh"]
+CMD ["tail", "-f", "/dev/null"]
