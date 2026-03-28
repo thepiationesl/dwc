@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DWC Remote Desktop</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: #16213e;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #0f3460;
+        }
+        
+        .header h1 {
+            font-size: 18px;
+            font-weight: 500;
+            color: #e94560;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .btn {
+            background: #0f3460;
+            color: #eee;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: background 0.2s;
+        }
+        
+        .btn:hover {
+            background: #1a4a7a;
+        }
+        
+        .btn.active {
+            background: #e94560;
+        }
+        
+        .btn svg {
+            width: 18px;
+            height: 18px;
+        }
+        
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .volume-slider {
+            width: 100px;
+            height: 4px;
+            -webkit-appearance: none;
+            background: #0f3460;
+            border-radius: 2px;
+            outline: none;
+        }
+        
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #e94560;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        .status {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            background: #0f3460;
+        }
+        
+        .status.connected {
+            background: #1b5e20;
+        }
+        
+        .status.disconnected {
+            background: #b71c1c;
+        }
+        
+        .vnc-container {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .vnc-frame {
+            width: 100%;
+            height: 100%;
+            max-width: 1920px;
+            max-height: 1080px;
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        .instructions {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .instructions p {
+            margin: 10px 0;
+            color: #aaa;
+        }
+        
+        .instructions code {
+            background: #0f3460;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>DWC Remote Desktop</h1>
+        <div class="controls">
+            <button id="audioBtn" class="btn" title="Enable Audio">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                </svg>
+                <span>Audio</span>
+            </button>
+            
+            <div class="volume-control">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 9v6h4l5 5V4L7 9H3z"/>
+                </svg>
+                <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="80">
+            </div>
+            
+            <span id="audioStatus" class="status disconnected">Audio Off</span>
+            
+            <button id="fullscreenBtn" class="btn" title="Fullscreen">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                </svg>
+            </button>
+        </div>
+    </header>
+    
+    <main class="vnc-container">
+        <iframe id="vncFrame" class="vnc-frame" src="/vnc.html?autoconnect=true&resize=scale"></iframe>
+    </main>
+    
+    <script src="audio-client.js"></script>
+    <script>
+        const audioBtn = document.getElementById('audioBtn');
+        const volumeSlider = document.getElementById('volumeSlider');
+        const audioStatus = document.getElementById('audioStatus');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const vncFrame = document.getElementById('vncFrame');
+        
+        let audioEnabled = false;
+        
+        // Audio button click
+        audioBtn.addEventListener('click', async () => {
+            if (!AudioStreamPlayer.isSupported()) {
+                alert('Web Audio API is not supported in this browser');
+                return;
+            }
+            
+            if (!audioEnabled) {
+                // Initialize and connect
+                if (window.audioPlayer.initAudioContext()) {
+                    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const audioWsUrl = `${wsProtocol}//${location.hostname}:6081`;
+                    
+                    window.audioPlayer.onConnect = () => {
+                        audioStatus.textContent = 'Audio On';
+                        audioStatus.classList.remove('disconnected');
+                        audioStatus.classList.add('connected');
+                    };
+                    
+                    window.audioPlayer.onDisconnect = () => {
+                        audioStatus.textContent = 'Audio Off';
+                        audioStatus.classList.remove('connected');
+                        audioStatus.classList.add('disconnected');
+                        audioEnabled = false;
+                        audioBtn.classList.remove('active');
+                    };
+                    
+                    window.audioPlayer.connect(audioWsUrl);
+                    audioEnabled = true;
+                    audioBtn.classList.add('active');
+                }
+            } else {
+                // Disconnect
+                window.audioPlayer.destroy();
+                window.audioPlayer = new AudioStreamPlayer();
+                audioEnabled = false;
+                audioBtn.classList.remove('active');
+                audioStatus.textContent = 'Audio Off';
+                audioStatus.classList.remove('connected');
+                audioStatus.classList.add('disconnected');
+            }
+        });
+        
+        // Volume slider
+        volumeSlider.addEventListener('input', () => {
+            const volume = volumeSlider.value / 100;
+            window.audioPlayer.setVolume(volume);
+        });
+        
+        // Fullscreen button
+        fullscreenBtn.addEventListener('click', () => {
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                document.documentElement.requestFullscreen();
+            }
+        });
+        
+        // Keyboard shortcut for fullscreen
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'F11') {
+                e.preventDefault();
+                fullscreenBtn.click();
+            }
+        });
+    </script>
+</body>
+</html>

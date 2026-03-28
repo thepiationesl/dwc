@@ -1,0 +1,119 @@
+# DWC Docker Compose - Local Testing
+# Usage: docker-compose up -d <service-name>
+
+version: "3.8"
+
+services:
+  # Alpine Dev - Full Development Environment
+  alpine-dev:
+    build:
+      context: .
+      dockerfile: dev/alpine/Dockerfile
+    image: dwc/alpine-dev:latest
+    container_name: dwc-alpine-dev
+    volumes:
+      - ./data/alpine-dev:/config
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+  # Alpine FVC - QEMU for Windows 10
+  alpine-fvc:
+    build:
+      context: .
+      dockerfile: dev/alpine/Dockerfile.fvc
+    image: dwc/alpine-fvc:latest
+    container_name: dwc-alpine-fvc
+    privileged: true
+    devices:
+      - /dev/kvm:/dev/kvm
+    volumes:
+      - ./data/storage:/storage
+    ports:
+      - "5900:5900"   # VNC
+      - "3389:3389"   # RDP (after Windows install)
+    restart: unless-stopped
+
+  # Debian Desktop - XFCE + VNC
+  debian-desktop:
+    build:
+      context: .
+      dockerfile: desktop/debian/Dockerfile
+    image: dwc/debian-desktop:latest
+    container_name: dwc-debian-desktop
+    volumes:
+      - ./data/debian-desktop:/config
+    ports:
+      - "6080:6080"   # noVNC
+      - "5901:5901"   # VNC
+    restart: unless-stopped
+
+  # Debian Desktop Audio - with audio and remote desktop
+  debian-audio:
+    build:
+      context: .
+      dockerfile: desktop/debian/Dockerfile.audio
+    image: dwc/debian-audio:latest
+    container_name: dwc-debian-audio
+    volumes:
+      - ./data/debian-audio:/config
+    ports:
+      - "6180:6080"   # noVNC
+      - "6181:6081"   # Audio WebSocket
+      - "6001:5901"   # VNC
+      - "3390:3389"   # xrdp
+      - "4001:4000"   # NoMachine
+    restart: unless-stopped
+
+  # Debian Asbru - asbru-cm connection manager
+  debian-asbru:
+    build:
+      context: .
+      dockerfile: desktop/debian/Dockerfile.asbru
+    image: dwc/debian-asbru:latest
+    container_name: dwc-debian-asbru
+    volumes:
+      - ./data/debian-asbru:/config
+    ports:
+      - "6280:6080"   # noVNC
+      - "6002:5901"   # VNC
+    restart: unless-stopped
+
+  # Kali Desktop - Full desktop with audio
+  kali-desktop:
+    build:
+      context: .
+      dockerfile: desktop/kali/Dockerfile
+    image: dwc/kali-desktop:latest
+    container_name: dwc-kali-desktop
+    volumes:
+      - ./data/kali-desktop:/config
+    ports:
+      - "6380:6080"   # noVNC
+      - "6381:6081"   # Audio WebSocket
+      - "6003:5901"   # VNC
+      - "3391:3389"   # xrdp
+      - "4002:4000"   # NoMachine
+    restart: unless-stopped
+
+  # Privacy - Tor Browser + Pidgin
+  privacy:
+    build:
+      context: .
+      dockerfile: privacy/alpine/Dockerfile
+    image: dwc/privacy:latest
+    container_name: dwc-privacy
+    volumes:
+      - ./data/privacy:/config
+    ports:
+      - "6480:6080"   # noVNC
+      - "6004:5901"   # VNC
+    restart: unless-stopped
+
+volumes:
+  alpine-dev-data:
+  storage-data:
+  debian-desktop-data:
+  debian-audio-data:
+  debian-asbru-data:
+  kali-desktop-data:
+  privacy-data:
