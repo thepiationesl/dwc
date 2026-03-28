@@ -16,21 +16,37 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 
-  # Alpine FVC - QEMU for Windows 10
+  # Alpine FVC - QEMU for Windows 10 (dockur/windows style)
   alpine-fvc:
     build:
       context: .
       dockerfile: dev/alpine/Dockerfile.fvc
     image: dwc/alpine-fvc:latest
     container_name: dwc-alpine-fvc
-    privileged: true
+    environment:
+      - VERSION=10
+      - LANGUAGE=Chinese
+      - VMX=Y
+      - HV=N
+      - DISK_SIZE=45G
+      - CPU_CORES=6
+      - RAM_SIZE=16G
+      - ARGUMENTS=-cpu host,-hypervisor,+vmx
     devices:
       - /dev/kvm:/dev/kvm
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
     volumes:
       - ./data/storage:/storage
+      - ./data/shared:/shared
     ports:
+      - "8006:8006"   # Web VNC (noVNC)
       - "5900:5900"   # VNC
-      - "3389:3389"   # RDP (after Windows install)
+      - "7100:7100"   # QEMU Monitor
+      - "3389:3389"   # RDP
+      - "3389:3389/udp"
+    stop_grace_period: 60s
     restart: unless-stopped
 
   # Debian Desktop - XFCE + VNC
