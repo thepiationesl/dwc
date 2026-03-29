@@ -7,8 +7,8 @@ FROM alpine:edge
 ARG TARGETARCH=amd64
 
 # Mirror source
-RUN echo "http://mirrors.7.b.0.5.0.7.4.0.1.0.0.2.ip6.arpa/system/alpine/edge/main" > /etc/apk/repositories && \
-    echo "http://mirrors.7.b.0.5.0.7.4.0.1.0.0.2.ip6.arpa/system/alpine/edge/community" >> /etc/apk/repositories
+RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/main" > /etc/apk/repositories && \
+    echo "http://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories
 
 # Install dependencies
 RUN apk add --no-cache \
@@ -24,8 +24,7 @@ RUN apk add --no-cache \
     wimlib \
     dosfstools \
     mtools \
-    genisoimage \
-    cdrkit \
+    libarchive \
     libxml2-utils \
     docker-cli \
     qemu-system-x86_64 \
@@ -37,7 +36,6 @@ RUN apk add --no-cache \
     netcat-openbsd \
     samba \
     samba-common-tools \
-    libarchive-tools \
     && rm -rf /var/cache/apk/*
 
 # Clean up QEMU firmware (keep only Windows 10 essentials)
@@ -67,10 +65,11 @@ RUN cd /usr/share/qemu && \
 RUN mkdir -p /run /storage /shared /var/drivers /tmp/qemu
 
 # Copy shared VM scripts
-COPY --chmod=755 vm/scripts/ /run/
+COPY scripts/ /run/
+RUN chmod -R 755 /run/*
 
 # Download VirtIO drivers (pre-packaged)
-ADD --chmod=664 https://github.com/qemus/virtiso-whql/releases/download/v1.9.49-0/virtio-win-1.9.49.tar.xz /var/drivers.txz
+ADD https://github.com/qemus/virtiso-whql/releases/download/v1.9.49-0/virtio-win-1.9.49.tar.xz /var/drivers.txz
 
 # Version marker
 ARG VERSION_ARG="1.0.0"

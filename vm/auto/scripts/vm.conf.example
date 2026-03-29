@@ -1,0 +1,34 @@
+# Windows VM Configuration
+# Copy this file to ~/vm/vm.conf or specify with -C option
+# Priority: CLI args > Environment > Config file > Defaults
+
+# Windows version: 10, 11, ltsc
+VERSION=10
+
+# Language: Chinese, English, Japanese
+LANGUAGE=Chinese
+
+# CPU cores
+CPU_CORES=4
+
+# RAM size (e.g., 8G, 16G)
+RAM_SIZE=8G
+
+# Disk size (e.g., 64G, 128G)
+DISK_SIZE=64G
+
+# Storage directory
+STORAGE=/storage
+
+# Network mode: N (user mode), Y (TAP bridge)
+VM_NET_TAP=N
+
+# TAP device name (if VM_NET_TAP=Y)
+VM_NET_DEV=tap0
+
+# TAP network IP (if VM_NET_TAP=Y)
+VM_NET_IP=172.20.0.1
+
+# DHCP range (if VM_NET_TAP=Y)
+VM_NET_DHCP_START=172.20.0.100
+VM_NET_DHCP_END=172.20.0.200

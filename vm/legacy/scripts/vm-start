@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SCRIPT_DIR/helpers.sh"
+. "$SCRIPT_DIR/config.sh"
+
+showUsage() {
+    cat << EOF
+Usage: vm-start [OPTIONS]
+
+Start Windows VM.
+
+Options:
+  -v, --version VERSION    Windows version (10, 11, ltsc) [default: 10]
+  -l, --language LANG      Language (Chinese, English, Japanese) [default: Chinese]
+  -c, --cpu CORES          CPU cores [default: 4]
+  -r, --ram SIZE           RAM size [default: 8G]
+  -s, --storage PATH       Storage directory [default: /storage]
+  -C, --config FILE        Config file [default: ~/vm/vm.conf]
+  -d, --daemon             Run in daemon mode
+  -h, --help               Show this help message
+
+Config file format (~/vm/vm.conf):
+  VERSION=10
+  LANGUAGE=Chinese
+  CPU_CORES=4
+  RAM_SIZE=8G
+EOF
+}
+
+parseArguments() {
+    DAEMON_MODE=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -v|--version)
+                export VERSION="${2:-}"
+                shift 2
+                ;;
+            -l|--language)
+                export LANGUAGE="${2:-}"
+                shift 2
+                ;;
+            -c|--cpu)
+                export CPU_CORES="${2:-}"
+                shift 2
+                ;;
+            -r|--ram)
+                export RAM_SIZE="${2:-}"
+                shift 2
+                ;;
+            -s|--storage)
+                export STORAGE="${2:-}"
+                shift 2
+                ;;
+            -C|--config)
+                export CONFIG_FILE="${2:-}"
+                shift 2
+                ;;
+            -d|--daemon)
+                DAEMON_MODE="yes"
+                shift
+                ;;
+            -h|--help)
+                showUsage
+                exit 0
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+}
+
+parseArguments "$@"
+
+initConfig
+. "$SCRIPT_DIR/define.sh"
+. "$SCRIPT_DIR/disk.sh"
+. "$SCRIPT_DIR/network.sh"
+. "$SCRIPT_DIR/install.sh"
+. "$SCRIPT_DIR/samba.sh"
+. "$SCRIPT_DIR/power.sh"
+
+STORAGE="${STORAGE:-$(getConfig STORAGE)}"
+STORAGE="${STORAGE:-/storage}"
+
+BOOT=""
+
+echo ""
+echo "========================================"
+echo "  Windows VM Start"
+echo "========================================"
+echo ""
+
+parseVersion
+parseLanguage
+
+if [ ! -f "$STORAGE/windows.img" ]; then
+    error "No disk image found!"
+    error "Run 'vm-setup' first to prepare the installation."
+    exit 1
+fi
+
+detectCustom
+if [ -n "$CUSTOM" ]; then
+    BOOT="$CUSTOM"
+else
+    lang=$(getLanguage "$LANGUAGE" "code")
+    iso="$STORAGE/${VERSION}_${lang}.iso"
+    [ -f "$iso" ] && BOOT="$iso"
+fi
+
+QEMU_PID="/run/shm/qemu.pid"
+if [ -f "$QEMU_PID" ]; then
+    pid=$(<"$QEMU_PID")
+    if isAlive "$pid"; then
+        error "VM is already running (PID: $pid)"
+        error "Run 'vm-stop' to stop it first."
+        exit 1
+    fi
+fi
+
+echo "Configuration:"
+echo "  VERSION:    $(printVersion "$VERSION")"
+echo "  CPU_CORES:  $CPU_CORES"
+echo "  RAM_SIZE:   $RAM_SIZE"
+echo "  DISK:       $STORAGE/windows.img"
+[ -n "$BOOT" ] && echo "  ISO:        $BOOT"
+echo ""
+
+configureNetwork
+startSamba
+
+export BOOT
+
+runQemu
+
+echo ""
+echo "========================================"
+echo "  VM Started Successfully"
+echo "========================================"
+echo ""
+echo "Access:"
+echo "  VNC:       localhost:5900"
+echo "  WebSocket: localhost:5700"
+echo "  RDP:       localhost:3389 (after install)"
+if [[ "$VM_NET_TAP" == [Yy1]* ]]; then
+echo "  Samba:     \\\\${VM_NET_IP:-172.20.0.1}\\shared"
+fi
+echo ""
+echo "Control:"
+echo "  vm-stop    - Stop VM gracefully"
+echo "  vm-status  - Show VM status"
+echo ""
+
+if [[ "${DAEMON_MODE:-}" == "yes" ]]; then
+    info "Running in daemon mode"
+    exit 0
+fi
+
+echo "Press Ctrl+C to detach (VM will keep running)"
+echo ""
+
+waitForQemu

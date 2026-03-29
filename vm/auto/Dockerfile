@@ -52,7 +52,6 @@ RUN apt-get install -y --no-install-recommends \
     bash \
     curl \
     wget \
-    htop \
     jq \
     yq \
     xz-utils \
@@ -62,17 +61,14 @@ RUN apt-get install -y --no-install-recommends \
     dosfstools \
     mtools \
     genisoimage \
-    cdrkit \
     libxml2-utils \
-    docker.io \
     qemu-system-x86 \
-    qemu-img \
-    qemu-system-modules-usb \
+    qemu-utils \
     ovmf \
     swtpm \
     netcat-openbsd \
     samba \
-    samba-common-tools \
+    samba-common-bin \
     libarchive-tools \
     tini \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -82,7 +78,8 @@ RUN mkdir -p /run /storage /shared /var/drivers /tmp/qemu /sysprep && \
     chmod 755 /run /storage /shared /var/drivers /tmp/qemu /sysprep
 
 # Copy VM scripts
-COPY --chmod=755 scripts/ /run/
+COPY scripts/ /run/
+RUN chmod -R 755 /run/*
 
 # Copy Sysprep files (user should mount these if needed)
 RUN echo "Note: Mount Sysprep files to /sysprep for automatic installation"
@@ -92,6 +89,29 @@ RUN cd /var/drivers && \
     curl -fsSL -o virtio-win.tar.xz "https://github.com/qemus/virtiso-whql/releases/download/v1.9.49-0/virtio-win-1.9.49.tar.xz" && \
     tar -xf virtio-win.tar.xz && \
     rm -f virtio-win.tar.xz || true
+
+# Clean up QEMU firmware (keep only Windows 10 essentials)
+RUN cd /usr/share/qemu && \
+    rm -rf \
+        palcode-* \
+        s390-* \
+        slof* \
+        openbios-* \
+        opensbi-* \
+        u-boot* \
+        qemu-nsis.bmp \
+        edk2-arm* \
+        edk2-aarch64* \
+        bamboo.dtb \
+        canyonlands.dtb \
+        hppa-firmware.img \
+        npcm7xx_bootrom.bin \
+        petalogix-*.dtb \
+        *ppc* \
+        *sparc* \
+        skiboot.lid \
+        trace-events-all \
+    2>/dev/null || true
 
 # Create version marker
 RUN echo "1.0.0-auto" > /run/version
