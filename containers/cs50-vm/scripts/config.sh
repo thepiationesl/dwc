@@ -6,7 +6,7 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="${CONFIG_FILE:-${SCRIPT_DIR}/vm.conf}"
+CONFIG_FILE="${CONFIG_FILE:-${HOME}/vm/vm.conf}"
 
 declare -A VM_CONFIG=(
     [VERSION]="10"
@@ -98,9 +98,9 @@ Options:
   -r, --ram SIZE           RAM size (default: 8G)
   -d, --disk SIZE          Disk size (default: 64G)
   -s, --storage PATH       Storage directory (default: /storage)
-  -C, --config FILE        Config file (default: <script-dir>/vm.conf)
+  -C, --config FILE        Config file (default: ~/vm/vm.conf)
 
-Config file format (<script-dir>/vm.conf):
+Config file format (~/vm/vm.conf):
   VERSION=10
   LANGUAGE=Chinese
   CPU_CORES=4

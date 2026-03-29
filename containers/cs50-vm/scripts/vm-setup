@@ -18,10 +18,10 @@ Options:
   -r, --ram SIZE           RAM size [default: 8G]
   -d, --disk SIZE          Disk size [default: 64G]
   -s, --storage PATH       Storage directory [default: /storage]
-  -C, --config FILE        Config file [default: <script-dir>/vm.conf]
+  -C, --config FILE        Config file [default: ~/vm/vm.conf]
   -h, --help               Show this help message
 
-Config file format (<script-dir>/vm.conf):
+Config file format (~/vm/vm.conf):
   VERSION=10
   LANGUAGE=Chinese
   CPU_CORES=4

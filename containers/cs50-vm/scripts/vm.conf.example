@@ -1,5 +1,5 @@
 # Windows VM Configuration
-# This file is automatically loaded by vm-setup, vm-start, vm-status
+# Copy this file to ~/vm/vm.conf or specify with -C option
 # Priority: CLI args > Environment > Config file > Defaults
 
 # Windows version: 10, 11, ltsc
