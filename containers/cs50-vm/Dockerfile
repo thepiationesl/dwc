@@ -101,9 +101,7 @@ RUN chmod +x /opt/vm/*.sh /opt/vm/vm-* 2>/dev/null || true && \
     ln -sf /opt/vm/vm-stop /usr/local/bin/vm-stop && \
     ln -sf /opt/vm/vm-status /usr/local/bin/vm-status
 
-# Copy CS50 scripts
-COPY opt/ /opt/cs50/
-RUN chmod +x /opt/cs50/bin/* 2>/dev/null || true
+# CS50 scripts removed (directory not present)
 
 # Configure bash for login shell
 RUN echo '\nshopt -q login_shell || exec bash --login -i' >> /etc/bash.bashrc

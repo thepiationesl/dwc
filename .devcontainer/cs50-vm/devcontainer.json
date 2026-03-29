@@ -46,8 +46,8 @@
       }
     }
   },
-  "postCreateCommand": "/opt/cs50/bin/postCreateCommand",
-  "postStartCommand": "/opt/cs50/bin/postStartCommand",
+  "postCreateCommand": "echo 'CS50 VM ready'",
+  "postStartCommand": "",
   "remoteEnv": {
     "CS50_GH_USER": "${localEnv:GITHUB_USER}",
     "MANUAL": "Y"

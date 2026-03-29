@@ -399,13 +399,13 @@ const UI = {
         } else {
             // Enable audio
             UI.audioPlayer.initAudioContext();
-            
+
             // Connect to audio WebSocket (port 6081 by default)
             const host = UI.getSetting('host') || window.location.hostname;
             const audioPort = 6081;
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const audioUrl = `${protocol}//${host}:${audioPort}`;
-            
+
             UI.audioPlayer.connect(audioUrl);
             UI.audioEnabled = true;
         }

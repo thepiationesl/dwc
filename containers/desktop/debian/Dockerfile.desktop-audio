@@ -118,16 +118,9 @@ COPY skel/.bashrc /etc/skel/.bashrc
 COPY skel/.profile /etc/skel/.profile
 
 # VNC startup script with PulseAudio
-RUN mkdir -p /etc/skel/.vnc && \
-    cat > /etc/skel/.vnc/xstartup << 'EOF'
-#!/bin/bash
-# Start PulseAudio
-pulseaudio --start --exit-idle-time=-1 2>/dev/null || true
-
-# Start XFCE4
-startxfce4 &
-EOF
-chmod +x /etc/skel/.vnc/xstartup
+RUN mkdir -p /etc/skel/.vnc
+RUN printf '#!/bin/bash\npulseaudio --start --exit-idle-time=-1 2>/dev/null || true\nstartxfce4 &\n' > /etc/skel/.vnc/xstartup
+RUN chmod +x /etc/skel/.vnc/xstartup
 
 # Copy entrypoint and scripts
 COPY common/entrypoint.sh /usr/local/bin/entrypoint.sh

@@ -75,7 +75,7 @@ services:
   desktop-audio:
     build:
       context: .
-      dockerfile: containers/desktop/debian/Dockerfile.audio
+      dockerfile: containers/desktop/debian/Dockerfile.desktop-audio
     image: dwc/desktop-audio
     container_name: dwc-desktop-audio
     volumes:
