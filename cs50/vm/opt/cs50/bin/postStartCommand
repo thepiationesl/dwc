@@ -1,4 +1,0 @@
-#!/bin/bash
-
-LOG="/tmp/cs50_vm_post_start_command.log"
-echo -e "\n$(date)" >> "$LOG"

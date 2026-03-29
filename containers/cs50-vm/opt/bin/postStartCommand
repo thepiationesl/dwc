@@ -1,0 +1,43 @@
+#!/bin/bash
+# CS50 VM - Post Start Command
+# Runs every time container starts
+
+LOG="/tmp/cs50_post_start.log"
+echo -e "\n$(date): postStartCommand" >> "$LOG"
+
+# Check KVM availability
+if [ -c /dev/kvm ]; then
+    echo "KVM: available" >> "$LOG"
+else
+    echo "KVM: not available (TCG fallback)" >> "$LOG"
+fi
+
+# Check TUN device
+if [ -c /dev/net/tun ]; then
+    echo "TUN: available" >> "$LOG"
+else
+    echo "TUN: not available" >> "$LOG"
+fi
+
+# Display welcome message
+echo ""
+echo "========================================"
+echo "  Windows VM Ready"
+echo "========================================"
+echo ""
+
+# KVM status
+if [ -c /dev/kvm ]; then
+    echo "[OK] KVM acceleration available"
+else
+    echo "[WARN] KVM not available - VM will be slow"
+fi
+
+# Show quick commands
+echo ""
+echo "Quick Start:"
+echo "  1. vm-setup    # Prepare ISO and disk"
+echo "  2. vm-start    # Launch VM"
+echo ""
+echo "Configuration: VERSION=$VERSION, RAM=$RAM_SIZE, DISK=$DISK_SIZE"
+echo ""

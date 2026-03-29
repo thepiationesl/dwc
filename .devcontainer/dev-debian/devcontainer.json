@@ -1,21 +1,23 @@
 {
-  "name": "DWC Dev Debian (Codespaces)",
+  "name": "DWC Dev Container",
   "build": {
     "context": "../..",
-    "dockerfile": "../../dev/debian/Dockerfile"
+    "dockerfile": "../../containers/dev/Dockerfile"
   },
   "overrideCommand": true,
-  "remoteUser": "qwe",
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "remoteUser": "dev",
+  "workspaceFolder": "/workspaces",
   "mounts": [
     "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
   ],
+  "runArgs": [
+    "--device=/dev/kvm",
+    "--device=/dev/net/tun",
+    "--cap-add=NET_ADMIN"
+  ],
   "customizations": {
     "codespaces": {
-      "openFiles": [
-        "README.md",
-        "docker-compose.yml"
-      ]
+      "openFiles": ["README.md"]
     },
     "vscode": {
       "extensions": [
@@ -23,8 +25,12 @@
         "ms-python.python",
         "ms-python.autopep8",
         "ms-vscode.cpptools"
-      ]
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "files.autoSave": "afterDelay"
+      }
     }
   },
-  "postCreateCommand": "bash -lc 'node -v && python3 --version && docker --version || true'"
+  "postCreateCommand": "bash -lc 'echo \"Dev Container Ready\" && node -v && python3 --version && docker --version || true'"
 }

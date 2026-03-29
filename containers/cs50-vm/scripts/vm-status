@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Load modules
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SCRIPT_DIR/helpers.sh"
+. "$SCRIPT_DIR/define.sh"
+. "$SCRIPT_DIR/disk.sh"
+. "$SCRIPT_DIR/power.sh"
+
+STORAGE="${STORAGE:-/storage}"
+
+echo ""
+echo "========================================"
+echo "  Windows VM Status"
+echo "========================================"
+echo ""
+
+# Parse configuration
+parseVersion
+parseLanguage
+
+# VM Status
+echo "QEMU Status: $(getQemuStatus)"
+echo ""
+
+# Configuration
+echo "Configuration:"
+echo "  VERSION:    $VERSION ($(printVersion "$VERSION"))"
+echo "  CPU_CORES:  $CPU_CORES"
+echo "  RAM_SIZE:   $RAM_SIZE"
+echo "  DISK_SIZE:  $DISK_SIZE"
+echo ""
+
+# Files
+echo "Files:"
+if [ -f "$STORAGE/windows.img" ]; then
+    echo "  Disk: $STORAGE/windows.img"
+    echo "        $(getDiskInfo "$STORAGE/windows.img" | grep -E "virtual size|disk size" | tr '\n' ', ')"
+else
+    echo "  Disk: Not created"
+fi
+
+if [ -f "$STORAGE/windows.rom" ]; then
+    echo "  UEFI: $STORAGE/windows.rom"
+fi
+
+# ISO files
+echo ""
+echo "ISO Files:"
+find "$STORAGE" -maxdepth 1 -name "*.iso" -exec echo "  - {}" \; 2>/dev/null || echo "  None"
+
+# KVM status
+echo ""
+echo "Hardware:"
+if [ -c /dev/kvm ]; then
+    echo "  KVM: Available"
+else
+    echo "  KVM: Not available"
+fi
+
+if [ -c /dev/net/tun ]; then
+    echo "  TUN: Available"
+else
+    echo "  TUN: Not available"
+fi
+
+echo ""

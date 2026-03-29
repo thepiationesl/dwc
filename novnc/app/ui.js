@@ -18,6 +18,7 @@ import Keyboard from "../core/input/keyboard.js";
 import RFB from "../core/rfb.js";
 import WakeLockManager from './wakelock.js';
 import * as WebUtil from "./webutil.js";
+import { AudioStreamPlayer } from "./audio.js";
 
 const PAGE_TITLE = "noVNC";
 
@@ -48,6 +49,10 @@ const UI = {
     reconnectPassword: null,
 
     wakeLockManager: new WakeLockManager(),
+
+    // Audio player
+    audioPlayer: null,
+    audioEnabled: false,
 
     async start(options={}) {
         UI.customSettings = options.settings || {};
@@ -123,6 +128,7 @@ const UI = {
         UI.addMachineHandlers();
         UI.addConnectionControlHandlers();
         UI.addClipboardHandlers();
+        UI.addAudioHandlers();
         UI.addSettingsHandlers();
         document.getElementById("noVNC_status")
             .addEventListener('click', UI.hideStatus);
@@ -342,6 +348,90 @@ const UI = {
             .addEventListener('click', UI.toggleClipboardPanel);
         document.getElementById("noVNC_clipboard_text")
             .addEventListener('change', UI.clipboardSend);
+    },
+
+    addAudioHandlers() {
+        // Initialize audio player
+        if (AudioStreamPlayer.isSupported()) {
+            UI.audioPlayer = new AudioStreamPlayer({
+                onConnect: () => {
+                    Log.Info("Audio connected");
+                    UI.updateAudioButton(true);
+                },
+                onDisconnect: () => {
+                    Log.Info("Audio disconnected");
+                    UI.updateAudioButton(false);
+                },
+                onError: (err) => {
+                    Log.Error("Audio error: " + err);
+                }
+            });
+        }
+
+        // Audio button click handler
+        const audioBtn = document.getElementById("noVNC_audio_button");
+        if (audioBtn) {
+            audioBtn.addEventListener('click', UI.toggleAudio);
+        }
+
+        // Volume slider handler
+        const volumeSlider = document.getElementById("noVNC_audio_volume");
+        if (volumeSlider) {
+            volumeSlider.addEventListener('input', (e) => {
+                if (UI.audioPlayer) {
+                    UI.audioPlayer.setVolume(e.target.value / 100);
+                }
+            });
+        }
+    },
+
+    toggleAudio() {
+        if (!UI.audioPlayer) {
+            UI.showStatus(_("Audio not supported"), 'warn');
+            return;
+        }
+
+        if (UI.audioEnabled) {
+            // Disable audio
+            UI.audioPlayer.destroy();
+            UI.audioEnabled = false;
+            UI.updateAudioButton(false);
+        } else {
+            // Enable audio
+            UI.audioPlayer.initAudioContext();
+            
+            // Connect to audio WebSocket (port 6081 by default)
+            const host = UI.getSetting('host') || window.location.hostname;
+            const audioPort = 6081;
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const audioUrl = `${protocol}//${host}:${audioPort}`;
+            
+            UI.audioPlayer.connect(audioUrl);
+            UI.audioEnabled = true;
+        }
+    },
+
+    updateAudioButton(connected) {
+        const audioBtn = document.getElementById("noVNC_audio_button");
+        if (audioBtn) {
+            if (connected) {
+                audioBtn.classList.add("noVNC_selected");
+            } else {
+                audioBtn.classList.remove("noVNC_selected");
+            }
+        }
+    },
+
+    setAudioVolume(volume) {
+        if (UI.audioPlayer) {
+            UI.audioPlayer.setVolume(volume);
+        }
+    },
+
+    muteAudio(muted) {
+        if (UI.audioPlayer) {
+            UI.audioPlayer.setMuted(muted);
+        }
     },
 
     // Add a call to save settings when the element changes,

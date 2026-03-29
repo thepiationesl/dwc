@@ -1,0 +1,50 @@
+#!/bin/bash
+# CS50 VM - Post Create Command
+# Runs once when container is created
+
+set -e
+
+LOG="/tmp/cs50_post_create.log"
+echo "$(date): postCreateCommand started" >> "$LOG"
+
+# Only run in Codespaces
+if [ "$CODESPACES" != "true" ]; then
+    echo "Not in Codespaces, skipping." >> "$LOG"
+    exit 0
+fi
+
+# Remove ACLs for umask to work
+if [ -n "${RepositoryName:-}" ] && [ -d "/workspaces/$RepositoryName" ]; then
+    setfacl --no-mask --recursive --remove-all "/workspaces/$RepositoryName" 2>/dev/null || true
+fi
+
+# Create .gitignore for VM files
+REPO_DIR="/workspaces/${RepositoryName:-}"
+if [ -d "$REPO_DIR" ]; then
+    cat > "$REPO_DIR/.gitignore" << 'EOF'
+# VM files
+*.qcow2
+*.img
+*.iso
+*.rom
+*.boot
+/storage/
+EOF
+fi
+
+# Ensure storage directory exists
+mkdir -p /storage /shared
+chmod 755 /storage /shared
+
+echo "$(date): postCreateCommand completed" >> "$LOG"
+echo ""
+echo "========================================"
+echo "  CS50 Windows VM Environment Ready"
+echo "========================================"
+echo ""
+echo "Commands:"
+echo "  vm-setup   - Download ISO and prepare disk"
+echo "  vm-start   - Start the virtual machine"
+echo "  vm-stop    - Stop the virtual machine"
+echo "  vm-status  - Check VM status"
+echo ""
