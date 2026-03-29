@@ -1,16 +1,32 @@
 #!/usr/bin/env bash
 # Version and language definitions
+# Supports: Config file, Environment variables, CLI arguments
 
 set -Eeuo pipefail
 
-# Default values
-VERSION="${VERSION:-10}"
-LANGUAGE="${LANGUAGE:-Chinese}"
-CPU_CORES="${CPU_CORES:-4}"
-RAM_SIZE="${RAM_SIZE:-8G}"
-DISK_SIZE="${DISK_SIZE:-64G}"
+VERSION=""
+LANGUAGE=""
+CPU_CORES=""
+RAM_SIZE=""
+DISK_SIZE=""
+STORAGE=""
+MANUAL=""
 
-# Version mappings
+loadConfig() {
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    . "$SCRIPT_DIR/config.sh"
+    
+    initConfig
+    
+    VERSION="$(getConfig VERSION)"
+    LANGUAGE="$(getConfig LANGUAGE)"
+    CPU_CORES="$(getConfig CPU_CORES)"
+    RAM_SIZE="$(getConfig RAM_SIZE)"
+    DISK_SIZE="$(getConfig DISK_SIZE)"
+    STORAGE="$(getConfig STORAGE)"
+    MANUAL="$(getConfig MANUAL)"
+}
+
 declare -A VERSIONS=(
     ["10"]="Windows 10"
     ["win10"]="Windows 10"
@@ -21,7 +37,6 @@ declare -A VERSIONS=(
     ["ltsc"]="Windows 10 LTSC"
 )
 
-# Language mappings
 declare -A LANGUAGES=(
     ["Chinese"]="zh-CN"
     ["English"]="en-US"
@@ -31,7 +46,6 @@ declare -A LANGUAGES=(
     ["French"]="fr-FR"
 )
 
-# Parse version
 parseVersion() {
     local ver="${VERSION,,}"
     
@@ -53,17 +67,14 @@ parseVersion() {
     export VERSION
 }
 
-# Get version display name
 printVersion() {
     local ver="$1"
     echo "${VERSIONS[$ver]:-Windows 10}"
 }
 
-# Parse language
 parseLanguage() {
     local lang="${LANGUAGE}"
     
-    # Map common names
     case "${lang,,}" in
         "chinese"|"cn"|"zh"|"zh-cn")
             LANGUAGE="Chinese"
@@ -82,7 +93,6 @@ parseLanguage() {
     export LANGUAGE
 }
 
-# Get language code
 getLanguage() {
     local lang="$1"
     local type="${2:-code}"

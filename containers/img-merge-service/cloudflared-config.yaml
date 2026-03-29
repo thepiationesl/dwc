@@ -1,0 +1,13 @@
+# Cloudflare Tunnel 配置
+# 用于IMG MERGE SERVICE
+
+# 隧道凭证文件
+credentials-file: /etc/cloudflared/credentials.json
+
+# 入口规则
+ingress:
+  # 主服务
+  - hostname: img-merge.example.com
+    service: http://localhost:8080
+  # 捕获所有其他请求
+  - service: http_status:404

@@ -1,13 +1,53 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Load modules
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/helpers.sh"
+. "$SCRIPT_DIR/config.sh"
+
+showUsage() {
+    cat << EOF
+Usage: vm-status [OPTIONS]
+
+Show Windows VM status.
+
+Options:
+  -s, --storage PATH       Storage directory [default: /storage]
+  -C, --config FILE        Config file [default: /storage/vm.conf]
+  -h, --help               Show this help message
+EOF
+}
+
+parseArguments() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -s|--storage)
+                export STORAGE="${2:-}"
+                shift 2
+                ;;
+            -C|--config)
+                export CONFIG_FILE="${2:-}"
+                shift 2
+                ;;
+            -h|--help)
+                showUsage
+                exit 0
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+}
+
+parseArguments "$@"
+
+initConfig
 . "$SCRIPT_DIR/define.sh"
 . "$SCRIPT_DIR/disk.sh"
 . "$SCRIPT_DIR/power.sh"
 
+STORAGE="${STORAGE:-$(getConfig STORAGE)}"
 STORAGE="${STORAGE:-/storage}"
 
 echo ""
@@ -16,23 +56,20 @@ echo "  Windows VM Status"
 echo "========================================"
 echo ""
 
-# Parse configuration
 parseVersion
 parseLanguage
 
-# VM Status
 echo "QEMU Status: $(getQemuStatus)"
 echo ""
 
-# Configuration
 echo "Configuration:"
 echo "  VERSION:    $VERSION ($(printVersion "$VERSION"))"
 echo "  CPU_CORES:  $CPU_CORES"
 echo "  RAM_SIZE:   $RAM_SIZE"
 echo "  DISK_SIZE:  $DISK_SIZE"
+echo "  STORAGE:    $STORAGE"
 echo ""
 
-# Files
 echo "Files:"
 if [ -f "$STORAGE/windows.img" ]; then
     echo "  Disk: $STORAGE/windows.img"
@@ -45,12 +82,10 @@ if [ -f "$STORAGE/windows.rom" ]; then
     echo "  UEFI: $STORAGE/windows.rom"
 fi
 
-# ISO files
 echo ""
 echo "ISO Files:"
 find "$STORAGE" -maxdepth 1 -name "*.iso" -exec echo "  - {}" \; 2>/dev/null || echo "  None"
 
-# KVM status
 echo ""
 echo "Hardware:"
 if [ -c /dev/kvm ]; then

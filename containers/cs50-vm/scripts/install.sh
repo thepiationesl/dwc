@@ -3,12 +3,33 @@
 
 set -Eeuo pipefail
 
-STORAGE="${STORAGE:-/storage}"
-TMP="$STORAGE/tmp"
+STORAGE=""
+DISK_SIZE=""
+VERSION=""
+LANGUAGE=""
 BOOT=""
 CUSTOM=""
 
-# Windows ISO URLs
+initInstallConfig() {
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    . "$SCRIPT_DIR/config.sh"
+    . "$SCRIPT_DIR/define.sh"
+    
+    initConfig
+    parseVersion
+    parseLanguage
+    
+    STORAGE="${STORAGE:-$(getConfig STORAGE)}"
+    DISK_SIZE="${DISK_SIZE:-$(getConfig DISK_SIZE)}"
+    
+    STORAGE="${STORAGE:-/storage}"
+    DISK_SIZE="${DISK_SIZE:-64G}"
+}
+
+initInstallConfig
+
+TMP="$STORAGE/tmp"
+
 getDownloadUrl() {
     local version="$1"
     
@@ -28,7 +49,6 @@ getDownloadUrl() {
     esac
 }
 
-# Download Windows ISO
 downloadIso() {
     local url
     url=$(getDownloadUrl "$VERSION")
@@ -51,7 +71,6 @@ downloadIso() {
     info "Download complete"
 }
 
-# Detect custom ISO
 detectCustom() {
     CUSTOM=""
     
@@ -64,19 +83,16 @@ detectCustom() {
     fi
 }
 
-# Check if installation can be skipped
 skipInstall() {
     [ -f "$STORAGE/windows.boot" ] && hasDisk && return 0
     return 1
 }
 
-# Start installation process
 startInstall() {
     info "Checking installation..."
     
     detectCustom
     
-    # Determine ISO path
     if [ -z "$CUSTOM" ]; then
         local lang
         lang=$(getLanguage "$LANGUAGE" "code")
@@ -85,34 +101,27 @@ startInstall() {
         BOOT="$CUSTOM"
     fi
     
-    # Skip if already installed
     if skipInstall; then
         info "Windows already installed"
         return 1
     fi
     
-    # Create temp
     rm -rf "$TMP"
     makeDir "$TMP"
     
-    # Download if needed
     if [ ! -f "$BOOT" ] || [ ! -s "$BOOT" ]; then
         downloadIso
     fi
     
-    # Create disk
     createDisk "$STORAGE/windows.img" "$DISK_SIZE" "qcow2"
     
-    # Setup EFI
     setupEfi
     
-    # Mark as installing
     touch "$STORAGE/windows.boot"
     
     return 0
 }
 
-# Extract VirtIO drivers
 extractDrivers() {
     if [ -d "/var/drivers/virtio-win" ]; then
         info "VirtIO drivers ready"

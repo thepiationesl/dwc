@@ -3,11 +3,27 @@
 
 set -Eeuo pipefail
 
-STORAGE="${STORAGE:-/storage}"
+STORAGE=""
+DISK_SIZE=""
+
+initDiskConfig() {
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    . "$SCRIPT_DIR/config.sh"
+    
+    initConfig
+    
+    STORAGE="${STORAGE:-$(getConfig STORAGE)}"
+    DISK_SIZE="${DISK_SIZE:-$(getConfig DISK_SIZE)}"
+    
+    STORAGE="${STORAGE:-/storage}"
+    DISK_SIZE="${DISK_SIZE:-64G}"
+}
+
+initDiskConfig
+
 DISK_FILE="$STORAGE/windows.img"
 EFI_FILE="$STORAGE/windows.rom"
 
-# Create disk image
 createDisk() {
     local file="${1:-$DISK_FILE}"
     local size="${2:-$DISK_SIZE}"
@@ -29,7 +45,6 @@ createDisk() {
     info "Disk created successfully"
 }
 
-# Setup EFI/UEFI
 setupEfi() {
     local src="/usr/share/OVMF/OVMF_VARS.fd"
     local dst="$EFI_FILE"
@@ -43,7 +58,6 @@ setupEfi() {
         setOwner "$dst"
         info "EFI vars initialized"
     else
-        # Try alternative locations
         for alt in /usr/share/OVMF/OVMF_VARS_4M.fd /usr/share/ovmf/OVMF_VARS.fd; do
             if [ -f "$alt" ]; then
                 cp "$alt" "$dst"
@@ -56,7 +70,6 @@ setupEfi() {
     fi
 }
 
-# Get disk info
 getDiskInfo() {
     local file="${1:-$DISK_FILE}"
     
@@ -68,7 +81,6 @@ getDiskInfo() {
     qemu-img info "$file" 2>/dev/null | grep -E "^(file format|virtual size|disk size)" || echo "Unknown"
 }
 
-# Resize disk
 resizeDisk() {
     local file="${1:-$DISK_FILE}"
     local size="$2"

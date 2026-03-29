@@ -1,13 +1,87 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Load modules
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/helpers.sh"
+. "$SCRIPT_DIR/config.sh"
+
+showUsage() {
+    cat << EOF
+Usage: vm-setup [OPTIONS]
+
+Setup Windows VM environment.
+
+Options:
+  -v, --version VERSION    Windows version (10, 11, ltsc) [default: 10]
+  -l, --language LANG      Language (Chinese, English, Japanese) [default: Chinese]
+  -c, --cpu CORES          CPU cores [default: 4]
+  -r, --ram SIZE           RAM size [default: 8G]
+  -d, --disk SIZE          Disk size [default: 64G]
+  -s, --storage PATH       Storage directory [default: /storage]
+  -C, --config FILE        Config file [default: <script-dir>/vm.conf]
+  -h, --help               Show this help message
+
+Config file format (<script-dir>/vm.conf):
+  VERSION=10
+  LANGUAGE=Chinese
+  CPU_CORES=4
+  RAM_SIZE=8G
+  DISK_SIZE=64G
+
+Priority: CLI args > Environment > Config file > Defaults
+EOF
+}
+
+parseArguments() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -v|--version)
+                export VERSION="${2:-}"
+                shift 2
+                ;;
+            -l|--language)
+                export LANGUAGE="${2:-}"
+                shift 2
+                ;;
+            -c|--cpu)
+                export CPU_CORES="${2:-}"
+                shift 2
+                ;;
+            -r|--ram)
+                export RAM_SIZE="${2:-}"
+                shift 2
+                ;;
+            -d|--disk)
+                export DISK_SIZE="${2:-}"
+                shift 2
+                ;;
+            -s|--storage)
+                export STORAGE="${2:-}"
+                shift 2
+                ;;
+            -C|--config)
+                export CONFIG_FILE="${2:-}"
+                shift 2
+                ;;
+            -h|--help)
+                showUsage
+                exit 0
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+}
+
+parseArguments "$@"
+
+initConfig
 . "$SCRIPT_DIR/define.sh"
 . "$SCRIPT_DIR/disk.sh"
 . "$SCRIPT_DIR/install.sh"
 
+STORAGE="${STORAGE:-$(getConfig STORAGE)}"
 STORAGE="${STORAGE:-/storage}"
 
 echo ""
@@ -16,7 +90,6 @@ echo "  Windows VM Setup"
 echo "========================================"
 echo ""
 
-# Parse configuration
 parseVersion
 parseLanguage
 
@@ -26,9 +99,9 @@ echo "  LANGUAGE:   $(getLanguage "$LANGUAGE" "name")"
 echo "  DISK_SIZE:  $DISK_SIZE"
 echo "  RAM_SIZE:   $RAM_SIZE"
 echo "  CPU_CORES:  $CPU_CORES"
+echo "  STORAGE:    $STORAGE"
 echo ""
 
-# Check for existing installation
 if [ -f "$STORAGE/windows.boot" ] && [ -f "$STORAGE/windows.img" ]; then
     warn "Existing Windows installation detected!"
     echo ""
@@ -44,10 +117,7 @@ echo ""
 echo "Starting setup..."
 echo ""
 
-# Extract drivers
 extractDrivers
-
-# Detect or download ISO
 detectCustom
 
 if [ -z "$CUSTOM" ]; then
@@ -65,13 +135,8 @@ else
     info "Using custom ISO: $BOOT"
 fi
 
-# Create disk
 createDisk "$STORAGE/windows.img" "$DISK_SIZE" "qcow2"
-
-# Setup EFI
 setupEfi
-
-# Mark ready
 touch "$STORAGE/windows.boot"
 
 echo ""
