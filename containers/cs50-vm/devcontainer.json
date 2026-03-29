@@ -1,0 +1,44 @@
+{
+  "$schema": "https://containers.dev/implementors/vs/schemas/devContainer.schema.json",
+  "name": "CS50 Windows VM",
+  "build": {
+    "context": ".",
+    "dockerfile": "Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.hexeditor"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "files.autoSave": "afterDelay",
+        "files.autoSaveDelay": 1000
+      }
+    }
+  },
+  "forwardPorts": [5900, 5700, 3389, 445],
+  "portsAttributes": {
+    "5900": { "label": "VNC" },
+    "5700": { "label": "VNC WebSocket" },
+    "3389": { "label": "RDP" },
+    "445": { "label": "SMB" }
+  },
+  "postCreateCommand": "/opt/cs50/bin/postCreateCommand",
+  "postStartCommand": "/opt/cs50/bin/postStartCommand",
+  "remoteEnv": {
+    "CS50_GH_USER": "${localEnv:GITHUB_USER}",
+    "MANUAL": "Y"
+  },
+  "runArgs": [
+    "--device=/dev/kvm",
+    "--device=/dev/net/tun",
+    "--cap-add=NET_ADMIN",
+    "--cap-add=SYS_ADMIN"
+  ],
+  "mounts": [
+    "source=cs50-vm-storage,target=/storage,type=volume"
+  ],
+  "workspaceFolder": "/workspaces",
+  "remoteUser": "root"
+}

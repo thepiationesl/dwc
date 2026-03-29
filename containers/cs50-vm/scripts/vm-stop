@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Load modules
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SCRIPT_DIR/helpers.sh"
+. "$SCRIPT_DIR/power.sh"
+. "$SCRIPT_DIR/samba.sh"
+
+echo ""
+echo "========================================"
+echo "  Windows VM Stop"
+echo "========================================"
+echo ""
+
+# Stop QEMU
+stopQemu
+
+# Stop Samba
+stopSamba
+
+echo ""
+echo "VM stopped."
+echo ""

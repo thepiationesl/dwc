@@ -1,8 +1,8 @@
 # DWC - Docker Workstation Containers
 
-一组可组合的容器镜像集合，提供开发环境、Windows 虚拟机、远程桌面和隐私工作站。
+一组可组合的容器镜像集合，提供开发环境、Windows 虚拟机和远程桌面。
 
-## ⚡ 快速开始
+## 快速开始
 
 ### 基本要求
 
@@ -13,158 +13,127 @@
 ### 常用命令
 
 ```bash
-# 推荐开发环境
-docker-compose up -d debian-dev
+# 开发环境
+docker-compose up -d dev
 
-# Windows VM（手动安装）
-docker-compose up -d windows-manual
+# Windows VM（手动模式）
+docker-compose up -d cs50-vm
 
-# Windows VM（自动安装）
-docker-compose up -d windows-auto
-
-# CS50 教学 VM
-docker-compose up -d cs50-windows
-
-# 远程桌面（Debian 或 Kali）
-docker-compose up -d debian-audio
-docker-compose up -d kali-desktop
-
-# 隐私工作站
-docker-compose up -d privacy
+# 远程桌面
+docker-compose up -d desktop
 ```
 
-## 📦 服务概览
-
-### 开发环境
-
-| 服务 | 说明 |
-|------|------|
-| `debian-dev` | 推荐的 Debian 开发环境，内置 Docker、Python、Node.js |
-| `alpine-dev` | 兼容旧版本的 Alpine 轻量开发环境 |
-
-### 虚拟机
-
-| 服务 | 说明 |
-|------|------|
-| `windows-manual` | Windows 10 VM，手动安装模式 |
-| `windows-auto` | Windows 10 VM，基于 Sysprep 自动安装 |
-| `windows` | 旧版兼容 VM（使用旧版镜像） |
-| `cs50-windows` | Windows 10 VM，CS50 教学场景优化 |
-
-### 远程桌面
-
-| 服务 | 说明 |
-|------|------|
-| `debian-desktop` | Debian XFCE 桌面，基础配置 |
-| `debian-audio` | Debian 桌面，支持音频和多种远程连接 |
-| `debian-asbru` | Debian 桌面，集成 Asbru SSH 管理工具 |
-| `kali-desktop` | Kali Linux 桌面，渗透测试工具集 |
-
-### 专用工作站
-
-| 服务 | 说明 |
-|------|------|
-| `privacy` | Tor + Pidgin 隐私工作站 |
-
-## 📁 仓库结构
+## 仓库结构
 
 ```
 dwc/
 ├── .devcontainer/           # VS Code Dev Container 配置
-├── common/                  # 公共脚本和工具
-├── cs50/                    # CS50 专用镜像和配置
-├── desktop/                 # 桌面环境镜像（Debian/Kali）
-├── dev/                     # 开发环境镜像
-├── docs/                    # 完整文档
-├── novnc/                   # noVNC Web VNC 客户端
-├── privacy/                 # 隐私工作站镜像
+│   ├── cs50-vm/             # CS50 VM Codespaces 配置
+│   └── dev-debian/          # 开发容器 Codespaces 配置
+├── containers/              # 容器镜像
+│   ├── cs50-vm/             # CS50 Windows VM（精简版 <1.5GB）
+│   ├── dev/                 # 开发环境（<1.2GB）
+│   └── desktop/             # 远程桌面（Debian/Kali）
+├── common/                  # 公共脚本
+├── novnc/                   # noVNC（带音频支持）
 ├── skel/                    # 用户环境模板
-├── vm/                      # Windows VM 核心镜像和脚本
-├── docker-compose.yml       # 统一编排配置文件
-└── README.md                # 本文件
+├── docs/                    # 文档
+│   ├── VM-MANUAL.md         # VM 手动安装指南
+│   ├── VM-AUTO.md           # VM 自动安装指南
+│   └── ARCHITECTURE.md      # 架构说明
+└── docker-compose.yml       # 编排配置
 ```
 
-## 📖 文档导航
+## 服务概览
 
-### 入门指南
+### CS50 VM
 
-- **[快速开始](docs/QUICKSTART.md)** - 最快部署方案
-- **[文档索引](docs/INDEX.md)** - 按场景查找文档
-
-### 核心文档
-
-- **[架构说明](docs/ARCHITECTURE.md)** - 系统设计和目录职责
-- **[项目蓝图](docs/BLUEPRINT.md)** - 设计约束和功能说明
-
-### 专题指南
-
-- **[虚拟机指南](docs/VM-GUIDE.md)** - Windows VM 部署和使用
-- **[CS50 指南](docs/CS50-VM-GUIDE.md)** - 教学场景配置
-- **[QEMU 高级参考](docs/QEMU-WINDOWS-10-GUIDE.md)** - 历史记录和高级调优
-- **[Codespaces 配置](docs/CODESPACES-DEV-VM-CS50.md)** - 云开发环境
-
-### 子目录说明
-
-- **[vm/ 详情](vm/README.md)** - Windows VM 镜像详解
-- **[cs50/ 详情](cs50/README.md)** - CS50 镜像详解
-
-## 🔧 常见任务
-
-### 构建镜像
+精简版 Windows 虚拟机，针对 GitHub Codespaces 优化：
 
 ```bash
-# 构建全部镜像
-docker-compose build
+# 启动容器
+docker run -it --device=/dev/kvm --device=/dev/net/tun \
+  --cap-add=NET_ADMIN -v ./storage:/storage dwc/cs50-vm
 
-# 构建特定镜像
-docker-compose build debian-dev
-docker-compose build windows-manual
-docker-compose build cs50-windows
+# 容器内执行
+vm-setup    # 准备安装
+vm-start    # 启动 VM
+vm-stop     # 停止 VM
+vm-status   # 查看状态
 ```
 
-### 查看日志
+详见 [VM 手动安装指南](docs/VM-MANUAL.md) 和 [VM 自动安装指南](docs/VM-AUTO.md)。
+
+### 开发容器
+
+标准开发环境，包含 Docker CLI、Python、Node.js、QEMU：
 
 ```bash
-# 查看特定容器日志
-docker-compose logs -f debian-dev
-
-# 进入容器
-docker exec -it debian-dev bash
+docker-compose up -d dev
+docker exec -it dev bash
 ```
 
-### 停止和清理
+### 远程桌面
+
+XFCE4 桌面环境，支持 VNC 和 noVNC：
 
 ```bash
-# 停止所有服务
-docker-compose down
-
-# 清理未使用的镜像和卷
-docker system prune -a --volumes
+docker-compose up -d desktop
+# 访问 http://localhost:6080
 ```
 
-## 🔑 默认配置
+## 配置
+
+### 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `VERSION` | `10` | Windows 版本 |
+| `LANGUAGE` | `Chinese` | 系统语言 |
+| `DISK_SIZE` | `64G` | 磁盘大小 |
+| `RAM_SIZE` | `8G` | 内存大小 |
+| `CPU_CORES` | `4` | CPU 核心数 |
+| `MANUAL` | `Y` | 手动模式 |
+
+### 镜像源
+
+所有镜像使用以下源：
+- Debian: `http://mirrors.7.b.0.5.0.7.4.0.1.0.0.2.ip6.arpa/mirrors/debian`
+- NPM: `http://mirrors.7.b.0.5.0.7.4.0.1.0.0.2.ip6.arpa/language/npm`
+
+### 目录约定
+
+| 路径 | 说明 |
+|------|------|
+| `/workspaces` | 用户根目录 |
+| `/storage` | VM 存储（磁盘、ISO） |
+| `/shared` | Samba 共享目录 |
+
+## GitHub Codespaces
+
+在 Codespaces 中选择对应的 devcontainer 配置：
+
+- **CS50 Windows VM** - `cs50-vm`
+- **Dev Container** - `dev-debian`
+
+## 默认配置
 
 | 项目 | 值 |
 |------|-----|
-| 用户名 | `qwe` |
+| 用户名 | `dev` / `qwe` |
 | 密码 | `toor` |
 | UID/GID | `1000/1000` |
-| 主目录 | `/config` |
 | VNC 密码 | `114514` |
 
-## 🆘 故障排查
+## 文档
 
-| 问题 | 解决方案 |
-|------|----------|
-| 容器无法启动 | 查看 [快速开始](docs/QUICKSTART.md) |
-| VM 连接失败 | 查看 [虚拟机指南](docs/VM-GUIDE.md) |
-| CS50 特定问题 | 查看 [CS50 指南](docs/CS50-VM-GUIDE.md) |
+- [VM 手动安装](docs/VM-MANUAL.md)
+- [VM 自动安装](docs/VM-AUTO.md)
+- [架构说明](docs/ARCHITECTURE.md)
+- [QEMU 参考](docs/QEMU-WINDOWS-10-GUIDE.md)
 
-## 📚 相关资源
+## 相关资源
 
-- [Docker 官方文档](https://docs.docker.com/)
-- [Docker Compose 文档](https://docs.docker.com/compose/)
-- [noVNC 项目](https://novnc.com/)
-- [QEMU 文档](https://www.qemu.org/)
-- [dockur/windows](https://github.com/dockur/windows)
-- [Harvard CS50](https://cs50.harvard.edu)
+- [dockur/windows](https://github.com/dockur/windows) - 参考实现
+- [cs50/codespace](https://github.com/cs50/codespace) - CS50 官方
+- [noVNC](https://novnc.com/) - Web VNC 客户端

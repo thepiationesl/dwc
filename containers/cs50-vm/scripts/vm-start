@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Load modules
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SCRIPT_DIR/helpers.sh"
+. "$SCRIPT_DIR/define.sh"
+. "$SCRIPT_DIR/disk.sh"
+. "$SCRIPT_DIR/network.sh"
+. "$SCRIPT_DIR/install.sh"
+. "$SCRIPT_DIR/samba.sh"
+. "$SCRIPT_DIR/power.sh"
+
+STORAGE="${STORAGE:-/storage}"
+BOOT=""
+
+echo ""
+echo "========================================"
+echo "  Windows VM Start"
+echo "========================================"
+echo ""
+
+# Parse configuration
+parseVersion
+parseLanguage
+
+# Check for disk
+if [ ! -f "$STORAGE/windows.img" ]; then
+    error "No disk image found!"
+    error "Run 'vm-setup' first to prepare the installation."
+    exit 1
+fi
+
+# Find boot ISO
+detectCustom
+if [ -n "$CUSTOM" ]; then
+    BOOT="$CUSTOM"
+else
+    lang=$(getLanguage "$LANGUAGE" "code")
+    iso="$STORAGE/${VERSION}_${lang}.iso"
+    [ -f "$iso" ] && BOOT="$iso"
+fi
+
+# Check if already running
+QEMU_PID="/run/shm/qemu.pid"
+if [ -f "$QEMU_PID" ]; then
+    pid=$(<"$QEMU_PID")
+    if isAlive "$pid"; then
+        error "VM is already running (PID: $pid)"
+        error "Run 'vm-stop' to stop it first."
+        exit 1
+    fi
+fi
+
+echo "Configuration:"
+echo "  VERSION:    $(printVersion "$VERSION")"
+echo "  CPU_CORES:  $CPU_CORES"
+echo "  RAM_SIZE:   $RAM_SIZE"
+echo "  DISK:       $STORAGE/windows.img"
+[ -n "$BOOT" ] && echo "  ISO:        $BOOT"
+echo ""
+
+# Setup network
+configureNetwork
+
+# Start Samba
+startSamba
+
+# Export BOOT for power.sh
+export BOOT
+
+# Start QEMU
+runQemu
+
+echo ""
+echo "========================================"
+echo "  VM Started Successfully"
+echo "========================================"
+echo ""
+echo "Access:"
+echo "  VNC:       localhost:5900"
+echo "  WebSocket: localhost:5700"
+echo "  RDP:       localhost:3389 (after install)"
+if [[ "$VM_NET_TAP" == [Yy1]* ]]; then
+echo "  Samba:     \\\\${VM_NET_IP:-172.20.0.1}\\shared"
+fi
+echo ""
+echo "Control:"
+echo "  vm-stop    - Stop VM gracefully"
+echo "  vm-status  - Show VM status"
+echo ""
+
+# Daemon mode check
+if [[ "${1:-}" == "-d" ]] || [[ "${1:-}" == "--daemon" ]]; then
+    info "Running in daemon mode"
+    exit 0
+fi
+
+echo "Press Ctrl+C to detach (VM will keep running)"
+echo ""
+
+# Wait for QEMU
+waitForQemu
