@@ -99,35 +99,6 @@ services:
       - "6002:5901"              # VNC
     restart: unless-stopped
 
-  # ============================================================================
-  # IMG MERGE SERVICE - 磁盘镜像合并服务
-  # ============================================================================
-  img-merge-service:
-    build:
-      context: .
-      dockerfile: containers/img-merge-service/Dockerfile
-    image: dwc/img-merge-service
-    container_name: img-merge-service
-    environment:
-      - STORAGE_DIR=/storage
-      - PORT=8080
-      - HOST=0.0.0.0
-      - MAX_CONTENT_LENGTH=10737418240
-      - DEBUG=false
-      # Cloudflare Tunnel (可选)
-      # - CLOUDFLARE_TUNNEL_TOKEN=your-tunnel-token
-    volumes:
-      - ./data/img-merge:/storage
-    ports:
-      - "8080:8080"              # HTTP API
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
 volumes:
   cs50-storage:
   dev-data:

@@ -1,0 +1,16 @@
+{
+  "name": "nkcfrdev environment",
+  "image": "miko453/dwc:latest",
+
+  "remoteUser": "dev",
+
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ],
+
+  "runArgs": [
+    "--device=/dev/kvm",
+    "--device=/dev/net/tun",
+    "--cap-add=NET_ADMIN"
+  ]
+}
