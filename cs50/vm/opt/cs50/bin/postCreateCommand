@@ -1,0 +1,21 @@
+#!/bin/bash
+
+if [ "$CODESPACES" != "true" ]; then
+    exit
+fi
+
+if [ -n "${RepositoryName:-}" ] && [ -d "/workspaces/$RepositoryName" ]; then
+    setfacl --no-mask --recursive --remove-all "/workspaces/$RepositoryName" 2>/dev/null || true
+fi
+
+# Create extensions directory for future use
+mkdir -p /opt/cs50/extensions
+
+# Log installed extensions for debugging
+if command -v code &> /dev/null || command -v code-insiders &> /dev/null; then
+    {
+        echo "Dev Container Setup Complete"
+        echo "Installed VS Code Extensions:"
+        code --list-extensions 2>/dev/null || code-insiders --list-extensions 2>/dev/null || echo "Could not list extensions"
+    } >> /tmp/cs50_devcontainer_setup.log 2>&1
+fi

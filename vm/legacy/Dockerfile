@@ -1,4 +1,4 @@
-# DWC Windows VM - Based on dockur/windows
+# DWC Windows VM (Legacy) - Based on dockur/windows
 # Manual mode by default, set MANUAL=N to auto-start
 # Target size: < 350MB
 
@@ -66,8 +66,8 @@ RUN cd /usr/share/qemu && \
 # Create directories
 RUN mkdir -p /run /storage /shared /var/drivers /tmp/qemu
 
-# Copy scripts
-COPY --chmod=755 src/ /run/
+# Copy shared VM scripts
+COPY --chmod=755 vm/scripts/ /run/
 
 # Download VirtIO drivers (pre-packaged)
 ADD --chmod=664 https://github.com/qemus/virtiso-whql/releases/download/v1.9.49-0/virtio-win-1.9.49.tar.xz /var/drivers.txz

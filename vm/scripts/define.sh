@@ -13,7 +13,7 @@ set -Eeuo pipefail
 : "${VERSION:="10"}"
 : "${DETECTED:=""}"
 : "${KEYBOARD:=""}"
-: "${LANGUAGE:="en"}"
+: "${LANGUAGE:="zh"}"
 : "${USERNAME:=""}"
 : "${PASSWORD:=""}"
 

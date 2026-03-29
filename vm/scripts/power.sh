@@ -83,6 +83,11 @@ buildQemuCmd() {
 # Run QEMU
 runQemu() {
     info "Starting QEMU..."
+    if [ ! -c /dev/kvm ]; then
+        error "KVM device not available"
+        error "This VM profile requires /dev/kvm and should be started only in a KVM-capable environment."
+        return 1
+    fi
     
     local cmd
     cmd=$(buildQemuCmd)

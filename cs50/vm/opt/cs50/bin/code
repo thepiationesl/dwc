@@ -1,0 +1,13 @@
+#!/bin/bash
+
+remote_code=$(which -a code | grep remote-cli || true)
+remote_insiders=$(which -a code-insiders | grep remote-cli || true)
+
+if [ -n "$remote_code" ]; then
+    exec "$remote_code" "$@"
+elif [ -n "$remote_insiders" ]; then
+    exec "$remote_insiders" "$@"
+else
+    echo "Error: Could not find VS Code remote CLI" >&2
+    exit 1
+fi

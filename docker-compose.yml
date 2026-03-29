@@ -1,33 +1,134 @@
-# DWC Docker Compose - Local Testing
+# DWC Docker Compose - Development and Testing
 # Usage: docker-compose up -d <service-name>
+# For more details, see docs/INDEX.md
 
 version: "3.8"
 
+# ============================================================================
+# DEVELOPMENT ENVIRONMENTS
+# ============================================================================
+
 services:
-  # Alpine Dev - Full Development Environment
+  # Debian Dev - Lightweight Development Environment (RECOMMENDED)
+  # Replaces alpine-dev, based on debian:unstable-slim
+  # Target: < 900MB, < 1.5GB runtime memory
+  debian-dev:
+    build:
+      context: .
+      dockerfile: dev/debian/Dockerfile
+    image: miko453/dwc:dev
+    container_name: dwc-debian-dev
+    volumes:
+      - ./data/debian-dev:/config
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - USER_NAME=qwe
+      - CONFIG_DIR=/config
+    restart: unless-stopped
+
+  # Alpine Dev - Legacy Development Environment (DEPRECATED)
+  # Kept for backward compatibility
   alpine-dev:
     build:
       context: .
       dockerfile: dev/alpine/Dockerfile
-    image: dwc/alpine-dev:latest
-    container_name: dwc-alpine-dev
+    image: miko453/dwc:alpine-dev-legacy
+    container_name: dwc-alpine-dev-legacy
     volumes:
       - ./data/alpine-dev:/config
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
 
-  # Windows VM - dockur/windows compatible (Manual Mode)
-  # Usage:
-  #   docker exec -it dwc-vm vm-setup   # Download ISO, drivers, create disk
-  #   docker exec -it dwc-vm vm-start   # Start QEMU
-  #   docker exec -it dwc-vm vm-stop    # Stop VM gracefully
-  #   docker exec -it dwc-vm vm-status  # Check status
+# ============================================================================
+# WINDOWS VIRTUAL MACHINES
+# ============================================================================
+
+  # Windows VM - Manual Installation Mode (RECOMMENDED)
+  # Users manually download ISO and install Windows
+  # Supports: Windows 10/11, Chinese/English
+  windows-manual:
+    build:
+      context: .
+      dockerfile: vm/manual/Dockerfile
+    image: miko453/dwc:windows-manual
+    container_name: dwc-windows-manual
+    environment:
+      - VERSION=10              # Windows 10, or 11 for Windows 11
+      - LANGUAGE=Chinese        # or English
+      - CPU_CORES=6
+      - RAM_SIZE=16G
+      - DISK_SIZE=120G
+      - MANUAL=Y
+      - KEYBOARD=                # leave empty for auto-detect
+      - REGION=                  # leave empty for auto-detect
+    devices:
+      - /dev/kvm:/dev/kvm
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ./data/windows-manual:/storage
+      - ./data/shared:/shared
+    ports:
+      - "5900:5900"              # VNC
+      - "5700:5700"              # VNC WebSocket
+      - "7100:7100"              # QEMU Monitor
+      - "3389:3389"              # RDP
+      - "3389:3389/udp"          # RDP UDP
+      - "445:445"                # Samba
+    stop_grace_period: 60s
+    restart: unless-stopped
+    # Usage:
+    #   docker exec -it dwc-windows-manual vm-setup   # Download ISO and prepare
+    #   docker exec -it dwc-windows-manual vm-start   # Start QEMU
+    #   docker exec -it dwc-windows-manual vm-stop    # Stop VM gracefully
+    #   docker exec -it dwc-windows-manual vm-status  # Check status
+
+  # Windows VM - Automatic Installation Mode
+  # Automatically installs Windows using Sysprep
+  # Requires Sysprep files mounted to /sysprep volume
+  windows-auto:
+    build:
+      context: .
+      dockerfile: vm/auto/Dockerfile
+    image: miko453/dwc:windows-auto
+    container_name: dwc-windows-auto
+    environment:
+      - VERSION=10
+      - LANGUAGE=Chinese
+      - CPU_CORES=6
+      - RAM_SIZE=16G
+      - DISK_SIZE=120G
+      - MANUAL=N                 # Auto-start
+      - KEYBOARD=
+      - REGION=
+    devices:
+      - /dev/kvm:/dev/kvm
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ./data/windows-auto:/storage
+      - ./data/shared:/shared
+      - ./sysprep:/sysprep       # Mount Sysprep files here
+    ports:
+      - "5901:5900"              # VNC (different port to avoid conflict)
+      - "5701:5700"              # VNC WebSocket
+      - "7101:7100"              # QEMU Monitor
+      - "3390:3389"              # RDP
+      - "3390:3389/udp"          # RDP UDP
+      - "446:445"                # Samba
+    stop_grace_period: 60s
+    restart: unless-stopped
+    # Note: Requires autounattend.xml in ./sysprep/ for automatic installation
+
+  # Legacy Windows VM - For backward compatibility
   windows:
     build:
       context: .
-      dockerfile: dev/vm/Dockerfile
-    image: dwc/windows:latest
-    container_name: dwc-vm
+      dockerfile: vm/legacy/Dockerfile
+    image: miko453/dwc:windows-legacy
+    container_name: dwc-windows-legacy
     environment:
       - VERSION=10
       - LANGUAGE=Chinese
@@ -47,96 +148,157 @@ services:
       - ./data/win:/storage
       - ./data/smb:/shared
     ports:
-      - "5900:5900"   # VNC
-      - "5700:5700"   # VNC WebSocket
-      - "7100:7100"   # QEMU Monitor
-      - "3389:3389"   # RDP
-      - "3389:3389/udp"
-      - "445:445"     # Samba
+      - "5902:5900"              # VNC (different port)
+      - "5702:5700"              # VNC WebSocket
+      - "7102:7100"              # QEMU Monitor
+      - "3391:3389"              # RDP
+      - "3391:3389/udp"          # RDP UDP
+      - "447:445"                # Samba
     stop_grace_period: 60s
     restart: unless-stopped
+
+# ============================================================================
+# DESKTOP ENVIRONMENTS
+# ============================================================================
 
   # Debian Desktop - XFCE + VNC
   debian-desktop:
     build:
       context: .
       dockerfile: desktop/debian/Dockerfile
-    image: dwc/debian-desktop:latest
+    image: miko453/dwc:debian-desktop
     container_name: dwc-debian-desktop
     volumes:
       - ./data/debian-desktop:/config
     ports:
-      - "6080:6080"   # noVNC
-      - "5901:5901"   # VNC
+      - "6080:6080"              # noVNC
+      - "5901:5901"              # VNC
     restart: unless-stopped
+    # Access: http://localhost:6080
 
-  # Debian Desktop Audio - with audio and remote desktop
+  # Debian Desktop with Audio - Full multimedia support
   debian-audio:
     build:
       context: .
       dockerfile: desktop/debian/Dockerfile.audio
-    image: dwc/debian-audio:latest
+    image: miko453/dwc:debian-audio
     container_name: dwc-debian-audio
     volumes:
       - ./data/debian-audio:/config
     ports:
-      - "6180:6080"   # noVNC
-      - "6181:6081"   # Audio WebSocket
-      - "6001:5901"   # VNC
-      - "3390:3389"   # xrdp
-      - "4001:4000"   # NoMachine
+      - "6180:6080"              # noVNC
+      - "6181:6081"              # Audio WebSocket
+      - "6001:5901"              # VNC
+      - "3390:3389"              # xrdp
+      - "4001:4000"              # NoMachine
     restart: unless-stopped
+    # Access: http://localhost:6180
 
-  # Debian Asbru - asbru-cm connection manager
+  # Debian Asbru - SSH Connection Manager with noVNC
   debian-asbru:
     build:
       context: .
       dockerfile: desktop/debian/Dockerfile.asbru
-    image: dwc/debian-asbru:latest
+    image: miko453/dwc:debian-asbru
     container_name: dwc-debian-asbru
     volumes:
       - ./data/debian-asbru:/config
     ports:
-      - "6280:6080"   # noVNC
-      - "6002:5901"   # VNC
+      - "6280:6080"              # noVNC
+      - "6002:5901"              # VNC
     restart: unless-stopped
+    # Access: http://localhost:6280
 
-  # Kali Desktop - Full desktop with audio
+  # Kali Desktop - Penetration Testing Platform
   kali-desktop:
     build:
       context: .
       dockerfile: desktop/kali/Dockerfile
-    image: dwc/kali-desktop:latest
+    image: miko453/dwc:kali-desktop
     container_name: dwc-kali-desktop
     volumes:
       - ./data/kali-desktop:/config
     ports:
-      - "6380:6080"   # noVNC
-      - "6381:6081"   # Audio WebSocket
-      - "6003:5901"   # VNC
-      - "3391:3389"   # xrdp
-      - "4002:4000"   # NoMachine
+      - "6380:6080"              # noVNC
+      - "6381:6081"              # Audio WebSocket
+      - "6003:5901"              # VNC
+      - "3391:3389"              # xrdp
+      - "4002:4000"              # NoMachine
     restart: unless-stopped
+    # Access: http://localhost:6380
 
-  # Privacy - Tor Browser + Pidgin
+# ============================================================================
+# PRIVACY & SECURITY
+# ============================================================================
+
+  # Privacy Desktop - Tor Browser + Pidgin
   privacy:
     build:
       context: .
       dockerfile: privacy/alpine/Dockerfile
-    image: dwc/privacy:latest
+    image: miko453/dwc:privacy
     container_name: dwc-privacy
     volumes:
       - ./data/privacy:/config
     ports:
-      - "6480:6080"   # noVNC
-      - "6004:5901"   # VNC
+      - "6480:6080"              # noVNC
+      - "6004:5901"              # VNC
     restart: unless-stopped
+    # Access: http://localhost:6480
+
+# ============================================================================
+# CS50 ENVIRONMENTS (Educational)
+# ============================================================================
+
+  # CS50 Windows VM - Optimized for Harvard CS50 Course
+  cs50-windows:
+    build:
+      context: .
+      dockerfile: cs50/vm/Dockerfile
+    image: miko453/dwc:cs50-vm
+    container_name: cs50-windows
+    environment:
+      - VERSION=10               # Windows 10
+      - LANGUAGE=English         # or Chinese
+      - CPU_CORES=4
+      - RAM_SIZE=8G
+      - DISK_SIZE=40G
+      - KEYBOARD=us
+      - REGION=US
+      - MANUAL=Y
+    devices:
+      - /dev/kvm:/dev/kvm
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ./data/cs50-windows:/storage
+      - ./data/cs50-shared:/shared
+    ports:
+      - "5903:5900"              # VNC
+      - "5703:5700"              # VNC WebSocket
+      - "7103:7100"              # QEMU Monitor
+      - "3392:3389"              # RDP (Recommended)
+      - "3392:3389/udp"          # RDP UDP
+      - "448:445"                # Samba
+    stop_grace_period: 60s
+    restart: unless-stopped
+    # Note: CS50 version is optimized for the Harvard CS50 course
+    # See docs/CS50-VM-GUIDE.md for details
+
+# ============================================================================
+# PERSISTENT VOLUMES
+# ============================================================================
 
 volumes:
-  alpine-dev-data:
-  storage-data:
+  debian-dev-data:
+  alpine-dev-legacy-data:
+  windows-manual-data:
+  windows-auto-data:
+  windows-legacy-data:
   debian-desktop-data:
   debian-audio-data:
   debian-asbru-data:
   kali-desktop-data:
   privacy-data:
+  cs50-windows-data:

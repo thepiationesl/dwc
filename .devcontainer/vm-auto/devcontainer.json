@@ -1,0 +1,25 @@
+{
+  "name": "DWC VM Auto (Codespaces)",
+  "build": {
+    "context": "../..",
+    "dockerfile": "../../vm/auto/Dockerfile"
+  },
+  "overrideCommand": true,
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "forwardPorts": [5900, 5700, 7100, 3389],
+  "portsAttributes": {
+    "5900": { "label": "VNC" },
+    "5700": { "label": "QEMU WebSocket" },
+    "7100": { "label": "QEMU Monitor" },
+    "3389": { "label": "RDP" }
+  },
+  "customizations": {
+    "codespaces": {
+      "openFiles": [
+        "vm/README.md",
+        "docs/VM-GUIDE.md"
+      ]
+    }
+  },
+  "postCreateCommand": "bash -lc 'echo Auto VM profile ready: keep parameters and sysprep handling in your scripts.'"
+}

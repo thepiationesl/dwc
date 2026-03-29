@@ -1,0 +1,30 @@
+{
+  "name": "DWC Dev Debian (Codespaces)",
+  "build": {
+    "context": "../..",
+    "dockerfile": "../../dev/debian/Dockerfile"
+  },
+  "overrideCommand": true,
+  "remoteUser": "qwe",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ],
+  "customizations": {
+    "codespaces": {
+      "openFiles": [
+        "README.md",
+        "docker-compose.yml"
+      ]
+    },
+    "vscode": {
+      "extensions": [
+        "ms-azuretools.vscode-docker",
+        "ms-python.python",
+        "ms-python.autopep8",
+        "ms-vscode.cpptools"
+      ]
+    }
+  },
+  "postCreateCommand": "bash -lc 'node -v && python3 --version && docker --version || true'"
+}
