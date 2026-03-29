@@ -55,6 +55,7 @@ RUN set -eux; \
         htop \
         vim \
         git \
+        git-lfs \
         jq \
         wget \
         python3 \
