@@ -11,31 +11,6 @@
       "userGid": "1000"
     },
 
-    "ghcr.io/devcontainers/features/node:1": {
-      "version": "24"
-    },
-
-    "ghcr.io/devcontainers/features/python:1": {
-      "version": "3.14.2",
-      "installJupyterlab": false,
-      "configureJupyterlabAllowOrigin": "*",
-      "useOryxIfAvailable": false
-    },
-
-    "ghcr.io/devcontainers/features/php:1": {
-      "version": "8.5.0",
-      "installComposer": true
-    },
-
-    "ghcr.io/devcontainers/features/git:1": {
-      "version": "latest",
-      "ppa": false
-    },
-
-    "ghcr.io/devcontainers/features/git-lfs:1": {
-      "version": "latest"
-    },
-
     "ghcr.io/devcontainers/features/github-cli:1": {
       "version": "latest"
     },
@@ -46,11 +21,8 @@
 
     "ghcr.io/devcontainers/features/docker-in-docker:2": {
       "version": "latest"
-    },
-
-    "ghcr.io/devcontainers/features/go:1": {
-      "version": "latest"
     }
+
   },
 
   "customizations": {
