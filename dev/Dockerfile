@@ -1,4 +1,4 @@
-FROM debian:sid-slim
+FROM debian:trixie-slim
 
 ENV LANG=C.UTF-8
 
