@@ -5,8 +5,8 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" })
 
 export const metadata: Metadata = {
-  title: "VM Manager - 极简虚拟机管理",
-  description: "专为 PVE 用户和 dockur/windows 用户打造的极简 VM 管理工具",
+  title: "QEMU Launcher - Web QEMU 启动器",
+  description: "极简 Web QEMU 启动器，专为 PVE 老用户设计",
 }
 
 export default function RootLayout({
