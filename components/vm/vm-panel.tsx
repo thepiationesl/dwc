@@ -1,6 +1,6 @@
 "use client"
 
-import type { VMInstance } from "@/types/vm"
+import type { VMConfig, VMStatus } from "@/types/vm"
 import {
   Play,
   Square,
@@ -11,78 +11,119 @@ import {
   HardDrive,
   Network,
   Monitor,
+  RotateCcw,
+  Loader2,
+  Clock,
 } from "lucide-react"
 
+interface VMWithStatus extends VMConfig {
+  status: VMStatus
+}
+
 interface VMPanelProps {
-  vm: VMInstance
+  vm: VMWithStatus
   onStart: () => void
   onStop: () => void
+  onReset: () => void
   onDelete: () => void
   onDuplicate: () => void
   onPreviewCommand: () => void
+  loading?: boolean
+}
+
+function formatUptime(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  return `${h}h ${m}m`
 }
 
 export function VMPanel({
   vm,
   onStart,
   onStop,
+  onReset,
   onDelete,
   onDuplicate,
   onPreviewCommand,
+  loading = false,
 }: VMPanelProps) {
-  const { config, status } = vm
-  const isRunning = status === "running"
-  const isStarting = status === "starting"
+  const isRunning = vm.status.running
 
   return (
     <div className="space-y-4">
       {/* 顶部操作栏 */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">{config.name}</h2>
-          <p className="text-sm text-muted-foreground">
-            {isRunning ? (
-              <span className="text-green-500">运行中</span>
-            ) : isStarting ? (
-              <span className="text-yellow-500">启动中...</span>
-            ) : status === "error" ? (
-              <span className="text-red-500">错误</span>
+          <h2 className="text-xl font-semibold text-foreground">{vm.name}</h2>
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            {loading ? (
+              <span className="flex items-center gap-1 text-yellow-500">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                处理中...
+              </span>
+            ) : isRunning ? (
+              <>
+                <span className="text-green-500">运行中</span>
+                {vm.status.pid && (
+                  <span className="text-xs">PID: {vm.status.pid}</span>
+                )}
+                {vm.status.uptime !== undefined && (
+                  <span className="flex items-center gap-1 text-xs">
+                    <Clock className="h-3 w-3" />
+                    {formatUptime(vm.status.uptime)}
+                  </span>
+                )}
+              </>
             ) : (
               <span>已停止</span>
             )}
-            {vm.vncPort && isRunning && (
-              <span className="ml-2 text-muted-foreground">
-                VNC ::{vm.vncPort}
+            {vm.display.type === "vnc" && isRunning && (
+              <span className="text-xs">
+                VNC :{(vm.display.port || 5900) - 5900}
               </span>
             )}
           </p>
         </div>
 
         <div className="flex gap-2">
-          {status === "stopped" ? (
+          {!isRunning ? (
             <button
               onClick={onStart}
-              className="flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700"
+              disabled={loading}
+              className="flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
             >
               <Play className="h-4 w-4" />
               启动
             </button>
-          ) : isRunning ? (
-            <button
-              onClick={onStop}
-              className="flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
-            >
-              <Square className="h-4 w-4" />
-              停止
-            </button>
-          ) : null}
+          ) : (
+            <>
+              <button
+                onClick={onStop}
+                disabled={loading}
+                className="flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                <Square className="h-4 w-4" />
+                停止
+              </button>
+              <button
+                onClick={onReset}
+                disabled={loading}
+                className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+              >
+                <RotateCcw className="h-4 w-4" />
+                重启
+              </button>
+            </>
+          )}
 
           <button
             onClick={onPreviewCommand}
             className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
           >
             <Terminal className="h-4 w-4" />
-            查看命令
+            命令
           </button>
 
           <button
@@ -95,7 +136,7 @@ export function VMPanel({
 
           <button
             onClick={onDelete}
-            disabled={isRunning}
+            disabled={isRunning || loading}
             className="rounded-md border border-border p-1.5 text-muted-foreground hover:bg-red-500/10 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50"
             title="删除"
           >
@@ -115,24 +156,28 @@ export function VMPanel({
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between">
               <dt className="text-muted-foreground">CPU</dt>
-              <dd className="font-mono text-foreground">{config.cpu} 核</dd>
+              <dd className="font-mono text-foreground">{vm.cpu.cores} 核</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">CPU 模型</dt>
+              <dd className="font-mono text-foreground">{vm.cpu.model}</dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-muted-foreground">内存</dt>
               <dd className="font-mono text-foreground">
-                {config.memory >= 1024 ? `${config.memory / 1024} GB` : `${config.memory} MB`}
+                {vm.memory >= 1024 ? `${vm.memory / 1024} GB` : `${vm.memory} MB`}
               </dd>
             </div>
             <div className="flex justify-between">
-              <dt className="text-muted-foreground">KVM 加速</dt>
-              <dd className="text-foreground">{config.enableKVM ? "已启用" : "未启用"}</dd>
+              <dt className="text-muted-foreground">KVM</dt>
+              <dd className="text-foreground">{vm.kvm ? "启用" : "禁用"}</dd>
             </div>
-            {config.machine && (
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">机器类型</dt>
-                <dd className="font-mono text-foreground">{config.machine}</dd>
-              </div>
-            )}
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">机型</dt>
+              <dd className="font-mono text-foreground">
+                {vm.q35 ? "Q35" : "i440FX"}
+              </dd>
+            </div>
           </dl>
         </div>
 
@@ -145,27 +190,41 @@ export function VMPanel({
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between">
               <dt className="text-muted-foreground">磁盘</dt>
-              <dd className="truncate font-mono text-foreground max-w-[200px]" title={config.diskPath}>
-                {config.diskPath}
+              <dd
+                className="truncate font-mono text-foreground max-w-[200px]"
+                title={vm.disk.path}
+              >
+                {vm.disk.path || "(未设置)"}
               </dd>
             </div>
-            {config.diskSize && (
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">大小</dt>
-                <dd className="font-mono text-foreground">{config.diskSize}</dd>
-              </div>
-            )}
-            {config.cdrom && (
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">大小</dt>
+              <dd className="font-mono text-foreground">{vm.disk.size}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">格式</dt>
+              <dd className="font-mono text-foreground uppercase">
+                {vm.disk.format}
+              </dd>
+            </div>
+            {vm.iso && (
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">ISO</dt>
-                <dd className="truncate font-mono text-foreground max-w-[200px]" title={config.cdrom}>
-                  {config.cdrom.split("/").pop()}
+                <dd
+                  className="truncate font-mono text-foreground max-w-[200px]"
+                  title={vm.iso}
+                >
+                  {vm.iso.split("/").pop()}
                 </dd>
               </div>
             )}
             <div className="flex justify-between">
               <dt className="text-muted-foreground">BIOS</dt>
-              <dd className="text-foreground">{config.bios === "uefi" ? "UEFI" : "SeaBIOS"}</dd>
+              <dd className="text-foreground">{vm.uefi ? "UEFI" : "SeaBIOS"}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-muted-foreground">TPM</dt>
+              <dd className="text-foreground">{vm.tpm ? "启用" : "禁用"}</dd>
             </div>
           </dl>
         </div>
@@ -179,15 +238,27 @@ export function VMPanel({
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between">
               <dt className="text-muted-foreground">类型</dt>
-              <dd className="font-mono text-foreground uppercase">{config.display}</dd>
+              <dd className="font-mono text-foreground uppercase">
+                {vm.display.type}
+              </dd>
             </div>
-            {config.display === "vnc" && (
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">VNC 端口</dt>
-                <dd className="font-mono text-foreground">
-                  :{config.vncPort ?? 0} (5900+)
-                </dd>
-              </div>
+            {vm.display.type === "vnc" && (
+              <>
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">端口</dt>
+                  <dd className="font-mono text-foreground">
+                    {vm.display.port || 5900}
+                  </dd>
+                </div>
+                {vm.display.websocket && (
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">WebSocket</dt>
+                    <dd className="font-mono text-foreground">
+                      {vm.display.websocket}
+                    </dd>
+                  </div>
+                )}
+              </>
             )}
           </dl>
         </div>
@@ -202,15 +273,31 @@ export function VMPanel({
             <div className="flex justify-between">
               <dt className="text-muted-foreground">模式</dt>
               <dd className="text-foreground">
-                {config.network === "user" ? "NAT (用户模式)" : 
-                 config.network === "bridge" ? "桥接" : "无网络"}
+                {vm.network.type === "user"
+                  ? "NAT"
+                  : vm.network.type === "bridge"
+                  ? "桥接"
+                  : "无网络"}
               </dd>
             </div>
-            {config.hostfwd && (
+            {vm.network.type === "bridge" && vm.network.bridge && (
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">网桥</dt>
+                <dd className="font-mono text-foreground">{vm.network.bridge}</dd>
+              </div>
+            )}
+            {vm.network.hostfwd && vm.network.hostfwd.length > 0 && (
               <div>
                 <dt className="text-muted-foreground mb-1">端口转发</dt>
-                <dd className="font-mono text-xs text-foreground bg-muted rounded px-2 py-1">
-                  {config.hostfwd}
+                <dd className="space-y-1">
+                  {vm.network.hostfwd.map((fwd, i) => (
+                    <div
+                      key={i}
+                      className="font-mono text-xs text-foreground bg-muted rounded px-2 py-1"
+                    >
+                      {fwd.protocol}:{fwd.hostPort} → {fwd.guestPort}
+                    </div>
+                  ))}
                 </dd>
               </div>
             )}
@@ -219,11 +306,11 @@ export function VMPanel({
       </div>
 
       {/* 额外参数 */}
-      {config.extraArgs && (
+      {vm.extra && (
         <div className="rounded-lg border border-border bg-card p-4">
           <div className="mb-2 text-sm font-medium text-foreground">额外参数</div>
           <pre className="text-xs font-mono text-muted-foreground bg-muted rounded p-2 overflow-x-auto">
-            {config.extraArgs}
+            {vm.extra}
           </pre>
         </div>
       )}
