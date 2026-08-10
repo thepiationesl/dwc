@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# dwc-openssh - 启动 openssh-server（jump 端口转发容器）
+# 关键：开启端口转发（-L/-R），禁用会阻碍转发的限制
+set -eu
+
+mkdir -p /run/sshd /config/ssh
+[ -f /config/ssh/ssh_host_ed25519_key ] || ssh-keygen -q -t ed25519 -f /config/ssh/ssh_host_ed25519_key -N ""
+[ -f /config/ssh/ssh_host_rsa_key ] || ssh-keygen -q -t rsa -b 3072 -f /config/ssh/ssh_host_rsa_key -N ""
+
+cat > /etc/ssh/sshd_config <<EOF
+Port ${SSH_PORT:-2222}
+ListenAddress 0.0.0.0
+HostKey /config/ssh/ssh_host_ed25519_key
+HostKey /config/ssh/ssh_host_rsa_key
+PermitRootLogin yes
+PasswordAuthentication ${ALLOW_PASSWORD:-yes}
+AllowTcpForwarding yes
+GatewayPorts clientspecified
+PermitOpen any
+X11Forwarding yes
+Subsystem sftp internal-sftp
+EOF
+
+exec /usr/sbin/sshd -D -e -f /etc/ssh/sshd_config

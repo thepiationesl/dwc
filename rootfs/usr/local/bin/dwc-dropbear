@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# dwc-dropbear - 启动 dropbear（jump 之外的容器使用）
+set -eu
+
+[ -f /config/ssh/dropbear_host_ed25519_key ] || \
+    dropbearkey -t ed25519 -f /config/ssh/dropbear_host_ed25519_key
+
+exec dropbear -E -p "${SSH_PORT:-2222}" \
+    -r /config/ssh/dropbear_host_ed25519_key \
+    -g -w

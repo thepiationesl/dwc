@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# dwc-xstartup - VNC 桌面启动脚本（qwe 用户执行）
+# 根据已安装的桌面环境选择启动器
+set -eu
+
+export DISPLAY=:1
+
+# 等待 X 就绪
+for _ in $(seq 1 20); do
+    xdpyinfo >/dev/null 2>&1 && break
+    sleep 0.3
+done
+
+# 桌面选择：icewm < xfce4 < startkde
+if command -v icewm >/dev/null 2>&1; then
+    exec icewm-session
+elif command -v startxfce4 >/dev/null 2>&1; then
+    exec startxfce4
+elif command -v startkde >/dev/null 2>&1; then
+    exec startkde
+else
+    exec xterm
+fi

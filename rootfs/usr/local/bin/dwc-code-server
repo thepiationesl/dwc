@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# dwc-code-server - 启动 code-server（code 镜像）
+# 数据存 /config（容器重置不丢），端口 8443，浏览器访问
+set -eu
+
+command -v code-server >/dev/null 2>&1 || { echo "code-server 未安装，跳过"; exit 0; }
+
+mkdir -p /config/code-server
+chown -R qwe:qwe /config/code-server 2>/dev/null || true
+
+exec code-server \
+    --bind-addr 0.0.0.0:${CODE_PORT:-8443} \
+    --user-data-dir /config/code-server \
+    --auth password \
+    --port 8443 \
+    --password "${CODE_PASSWORD:-toor}" \
+    /workspace

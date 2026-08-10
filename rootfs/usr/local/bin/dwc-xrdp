@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# dwc-xrdp - 启动 xrdp（仅 full/studio，端口 3389）
+# studio 需 pulseaudio 模块传声音，xrdp 启动时自动加载
+set -eu
+
+command -v xrdp >/dev/null 2>&1 || { echo "xrdp 未安装，跳过"; exit 0; }
+
+mkdir -p /run/xrdp /var/run/xrdp
+
+# 启动 xrdp-sesman 和 xrdp
+xrdp-sesman 2>/dev/null &
+sleep 1
+exec xrdp -n

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# dwc-tor - 启动 Tor 客户端 + 代理（tor 镜像）
+# SOCKS5 端口 9050，控制端口 9051，防 DNS 泄漏
+set -eu
+
+command -v tor >/dev/null 2>&1 || { echo "tor 未安装，跳过"; exit 0; }
+
+mkdir -p /config/tor /run/tor
+chown -R debian-tor:debian-tor /config/tor /run/tor 2>/dev/null || true
+
+cat > /etc/tor/torrc <<EOF
+DataDirectory /config/tor
+SocksPort 0.0.0.0:9050
+ControlPort 0.0.0.0:9051
+DNSPort 0.0.0.0:5353
+AutomapHostsOnResolve 1
+VirtualAddrNetwork 10.192.0.0/10
+EOF
+
+exec tor -f /etc/tor/torrc

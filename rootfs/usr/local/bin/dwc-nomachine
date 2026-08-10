@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# dwc-nomachine - 启动 NoMachine（仅 full/studio）
+set -eu
+
+command -v /usr/NX/bin/nxserver >/dev/null 2>&1 || { echo "NoMachine 未安装，跳过"; exit 0; }
+
+NOMACHINE_USER="${NOMACHINE_USER:-qwe}"
+NOMACHINE_PASSWORD="${NOMACHINE_PASSWORD:-toor}"
+
+# 确保 NX 用户存在
+id -u "${NOMACHINE_USER}" >/dev/null 2>&1 || {
+    useradd -m -s /bin/bash "${NOMACHINE_USER}" 2>/dev/null || true
+}
+echo "${NOMACHINE_USER}:${NOMACHINE_PASSWORD}" | chpasswd 2>/dev/null || true
+
+/usr/NX/bin/nxserver --restart 2>/dev/null || true
+
+# NoMachine 前台运行（server 通过 nxserver 管理）
+exec tail -f /usr/NX/var/log/nxserver.log

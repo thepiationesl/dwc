@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# dwc-xstartup-su - 以 qwe 用户启动 VNC 桌面会话（供 supervisord 调用）
+set -eu
+
+export DISPLAY=:1
+
+# 等待 VNC/Xvfb 显示就绪
+for _ in $(seq 1 40); do
+    xdpyinfo -display :1 >/dev/null 2>&1 && break
+    sleep 0.5
+done
+
+# qwe 用户执行 xstartup（Debian 系 qwe 有 sudo；Alpine 用 su）
+if id qwe >/dev/null 2>&1; then
+    if command -v runuser >/dev/null 2>&1; then
+        exec runuser -u qwe -- /usr/local/bin/dwc-xstartup
+    else
+        exec su - qwe -c /usr/local/bin/dwc-xstartup
+    fi
+else
+    exec /usr/local/bin/dwc-xstartup
+fi

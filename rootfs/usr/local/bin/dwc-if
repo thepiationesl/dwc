@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# dwc-if - 根据环境变量决定是否执行命令
+# 用法：dwc-if ENABLE_SSH some_command args...
+# 当环境变量 ENABLE_SSH 为 true/1/yes 时执行命令，否则以 0 退出
+set -eu
+
+VAR_NAME="${1:?usage: dwc-if VAR_NAME command...}"
+shift
+
+case "${!VAR_NAME:-false}" in
+    true|1|yes|TRUE|YES|on) ;;
+    *)
+        exit 0
+        ;;
+esac
+
+exec "$@"

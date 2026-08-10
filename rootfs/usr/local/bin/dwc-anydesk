@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# dwc-anydesk - 启动 Anydesk（仅 full/studio，端口 7070）
+# 容器内需 X 会话，注意坑：社区方案少
+set -eu
+
+command -v anydesk >/dev/null 2>&1 || { echo "Anydesk 未安装，跳过"; exit 0; }
+
+export DISPLAY="${DISPLAY:-:1}"
+
+# 等待 X 就绪（依赖 dwc-xvnc）
+for _ in $(seq 1 30); do
+    xdpyinfo -display "${DISPLAY}" >/dev/null 2>&1 && break
+    sleep 0.5
+done
+
+exec anydesk --start-with-x --quiet

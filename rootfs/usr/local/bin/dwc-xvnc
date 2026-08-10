@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# dwc-xvnc - 启动 Xvnc（基于 Xvfb + x11vnc，或原生 Xvnc）
+# 桌面型镜像使用；通过 VNC_PASSWORD / VNC_GEOMETRY 环境变量配置
+set -eu
+
+export DISPLAY=:1
+VNC_GEOMETRY="${VNC_GEOMETRY:-1920x1200}"
+VNC_DEPTH="${VNC_DEPTH:-24}"
+VNC_PASSWORD="${VNC_PASSWORD:-114514}"
+
+mkdir -p /config/vnc /home/qwe/.vnc 2>/dev/null || true
+chown -R qwe:qwe /home/qwe/.vnc 2>/dev/null || true
+
+# 密码文件（x11vnc 需要）
+printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" > /config/vnc/passwd
+chmod 600 /config/vnc/passwd
+
+# 优先原生 Xvnc（Xvfb 的桌面版），否则回退 Xvfb + x11vnc
+if command -v Xvnc >/dev/null 2>&1; then
+    exec Xvnc :1 -geometry "$VNC_GEOMETRY" -depth "$VNC_DEPTH" \
+        -PasswordFile /config/vnc/passwd -localhost -rfbport "${VNC_PORT:-5901}"
+else
+    # Xvfb 启动虚拟显示
+    Xvfb :1 -screen 0 "${VNC_GEOMETRY}x${VNC_DEPTH}" -nolisten tcp &
+    XVFB_PID=$!
+    trap 'kill $XVFB_PID 2>/dev/null || true' EXIT
+    # 等待 Xvfb 就绪
+    for _ in $(seq 1 20); do
+        xdpyinfo -display :1 >/dev/null 2>&1 && break
+        sleep 0.3
+    done
+    # 以 qwe 用户启动 x11vnc（密码从文件读取）
+    exec x11vnc -display :1 -forever -shared -rfbauth /config/vnc/passwd \
+        -rfbport "${VNC_PORT:-5901}" -geometry "$VNC_GEOMETRY"
+fi

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# dwc-entrypoint - 容器入口，supervisord 作为 init
+# 所有进程由 supervisord 管理，服务开关由环境变量控制
+set -eu
+
+umask 0022
+
+# 加载统一默认环境变量（含 ENABLE_* 开关，供 supervisord 子进程继承）
+if [ -f /etc/profile.d/dwc-env.sh ]; then
+    . /etc/profile.d/dwc-env.sh
+    export LANG TZ LC_ALL VNC_PASSWORD VNC_GEOMETRY VNC_PORT NOVNC_PORT ENABLE_SSH SSH_PORT ALLOW_PASSWORD
+    export ENABLE_VNC ENABLE_NOMACHINE ENABLE_XRDP ENABLE_ANYDESK ENABLE_CODE ENABLE_TOR ENABLE_SSH
+fi
+
+# 确保关键目录存在
+mkdir -p /run /config/logs /config/ssh /config/vnc 2>/dev/null || true
+
+# 生成/复用 SSH host key（持久化到 /config/ssh，容器重置不丢）
+if [ -f /usr/sbin/dropbear ]; then
+    [ -f /config/ssh/dropbear_host_ed25519_key ] || \
+        dropbearkey -t ed25519 -f /config/ssh/dropbear_host_ed25519_key 2>/dev/null || true
+fi
+
+# 生成/复用 openssh host key（jump 镜像）
+if [ -f /usr/sbin/sshd ] || [ -f /usr/sbin/sshd_config ] || [ -d /etc/ssh ]; then
+    mkdir -p /config/ssh
+    [ -f /config/ssh/ssh_host_ed25519_key ] || ssh-keygen -q -t ed25519 -f /config/ssh/ssh_host_ed25519_key -N "" 2>/dev/null || true
+    [ -f /config/ssh/ssh_host_rsa_key ] || ssh-keygen -q -t rsa -b 3072 -f /config/ssh/ssh_host_rsa_key -N "" 2>/dev/null || true
+fi
+
+# 透传所有 dwc 环境变量给子进程（supervisord 会自动继承）
+export DWC_HOSTNAME="$(hostname 2>/dev/null || echo dwc)"
+
+# 启动 supervisord（PID 1）
+exec supervisord -c /etc/supervisord.conf
