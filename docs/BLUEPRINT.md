@@ -10,7 +10,7 @@
 
 ### 1.2 核心设计原则
 - **本集群不支持复用镜像**：每个容器独立构建，不 FROM 其他自定义镜像（也因此砍掉 base）
-- **无特权运行**：所有容器支持非特权运行（fallback），统一使用 dropbear 作为 SSH 服务
+- **无特权运行**：所有容器支持非特权运行（fallback），常规容器统一使用 dropbear 作为轻量 SSH 服务；**jump 端口转发容器使用 openssh-server**（dropbear 不支持端口转发）
 - **数据持久化**：统一挂载 `/config` 目录
 - **用户管理**：普通用户 `qwe:toor`（sudo）+ root `root:toor`，默认密码 root/toor、qwe/toor
 - **安装机制**：外部 `scripts/install-*.sh` 脚本，Dockerfile 仅负责基础环境
@@ -85,7 +85,8 @@
 - 无头 chromium（参考 linuxserver/docker-chromium），上 onion 需确保安全，浏览器单独容器，防被黑影响其他服务
 
 #### jump（SSH 端口转发）
-- 部分环境只开一个端口，专门跑 openssh 做端口转发
+- 部分环境只开一个端口，专门跑 **openssh-server** 做端口转发（dropbear 不支持端口转发，故用 openssh-server）
+- 启用 `AllowTcpForwarding yes` 支持 `-L/-R` 隧道
 
 #### chat（聊天通信）
 - Pidgin + HexChat（参考 linuxserver/docker-pidgin），IceWM，轻量 VNC 可选
@@ -167,7 +168,7 @@ supervisorctl stop dropbear
 
 ## 四、核心亮点
 
-1. **无特权架构**：dropbear SSH + `/config` 持久化，安全容器环境
+1. **无特权架构**：dropbear SSH + `/config` 持久化，安全容器环境；jump 端口转发容器改用 openssh-server
 2. **极致轻量化**：全系最小化安装，适配 1c1g10g 低配 VPS
 3. **中文桌面主力**：Kali VNC 传输中文最稳定，专为中文使用优化
 4. **多媒体工作站**：Synthesizer V Studio + OBS + VLC + ffmpeg，走 xrdp-pulseaudio / NoMachine 传声音
