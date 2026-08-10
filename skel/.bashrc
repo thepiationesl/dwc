@@ -54,9 +54,11 @@ fi
 
 if [ "$color_prompt" = yes ]; then
     current_git_branch() {
-        git branch 2>/dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/{\1}/'
+        if command -v git >/dev/null 2>&1; then
+            git branch 2>/dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/{\1}/'
+        fi
     }
-    PS1='\[\033[00;35m\]$WORKSPACE_SLUG\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\[\033[01;32m\]$(current_git_branch)\[\033[00m\]$ '
+    PS1='\[\033[01;34m\]\w\[\033[00m\]\[\033[01;32m\]$(current_git_branch)\[\033[00m\]$ '
 else
     PS1='${debian_chroot:+($debian_chroot)}\u@\h:\w\$ '
 fi
@@ -109,7 +111,3 @@ if ! shopt -oq posix; then
     . /etc/bash_completion
   fi
 fi
-
-function command_not_found_handle {
-  exec _idx_command_not_found "$@"
-}
