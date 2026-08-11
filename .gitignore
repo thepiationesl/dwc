@@ -1,2 +1,5 @@
+# 本地状态 / 构建产物
 exas/
 node_modules/
+images/*/build/
+*.log
