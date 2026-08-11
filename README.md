@@ -8,13 +8,13 @@
 git clone git@github.com:thepiationesl/dwc.git
 cd dwc
 
-make list              # 列出全部 16 个镜像
+make list              # 列出全部 13 个镜像
 make build IMG=desk    # 构建单个镜像（缺省构建全部）
 make run   IMG=desk    # 运行（按镜像类型自动映射端口）
 make clean IMG=desk    # 删除镜像
 ```
 
-构建上下文为仓库根：docker build -f images/<img>/Dockerfile .，依赖 scripts/、rootfs/、skel/ 均被 COPY 进镜像。
+构建上下文为仓库根：`docker build -f images/<img>/Dockerfile .`，依赖 scripts/、rootfs/、skel/ 均被 COPY 进镜像。
 
 ## 目录结构
 
@@ -30,7 +30,7 @@ dwc/
 ├── docs/                    # BLUEPRINT.md（设计蓝图）、HISTORY.md（演进记录）
 └── refs/                    # REFS.md（参考项目研究笔记）
 
-## 镜像清单（16 个）
+## 镜像清单（13 个）
 
 | 镜像 | 基底 | 类型 | 远程访问 |
 |------|------|------|----------|
@@ -51,15 +51,15 @@ dwc/
 ## 设计原则
 
 - 单容器单职责：每个镜像独立构建，不 FROM 其他自定义镜像（无 base 层）。
-- 无特权运行：常规容器用 dropbear 轻量 SSH；jump 用 openssh-server（dropbear 不支持端口转发）。
-- 数据持久化：统一挂载 /config；SSH/VNC host key 持久化到 /config，容器重置不丢。
-- 用户：qwe:toor（sudo）+ root:toor。
-- 服务开关：环境变量 ENABLE_*（ENABLE_VNC/ENABLE_SSH/ENABLE_CODE/ENABLE_TOR/...）由 dwc-if 控制 supervisord 子进程启停。
-- VNC 服务端：Debian 12+ / Kali 用 TigerVNC（tigervnc-standalone-server + tigervnc-tools）；Debian 11 (asbru) 用 tightvncserver；Alpine 回退 Xvfb + x11vnc。
+- 无特权运行：常规容器用 dropbear 轻量 SSH；`jump` 用 openssh-server（dropbear 不支持端口转发）。
+- 数据持久化：统一挂载 `/config`；SSH/VNC host key 持久化到 `/config`，容器重置不丢。
+- 用户：`qwe:toor`（sudo）+ `root:toor`。
+- 服务开关：环境变量 `ENABLE_*`（`ENABLE_VNC`/`ENABLE_SSH`/`ENABLE_CODE`/`ENABLE_TOR`/…）由 `dwc-if` 控制 supervisord 子进程启停。
+- VNC 服务端：Debian 12+ / Kali 用 TigerVNC（`tigervnc-standalone-server` + `tigervnc-tools`）；Debian 11 (asbru) 用 `tightvncserver`；Alpine 回退 Xvfb + x11vnc。
 
 ## 已知非阻断风险
 
-- dwc-xrdp / dwc-nomachine / dwc-anydesk 在命令不支持 --help 或崩溃时可能触发 supervisord 重启（已有 command -v 守卫，未装则干净退出）。
-- tor 镜像的 SocksPort/DNSPort/ControlPort 绑 0.0.0.0（独立匿名容器设计如此）。
+- `dwc-xrdp` / `dwc-nomachine` / `dwc-anydesk` 在命令不支持 `--help` 或崩溃时可能触发 supervisord 重启（已有 `command -v` 守卫，未装则干净退出）。
+- `tor` 镜像的 SocksPort/DNSPort/ControlPort 绑 `0.0.0.0`（独立匿名容器设计如此）。
 
 详见 docs/BLUEPRINT.md（完整设计）与 docs/HISTORY.md（演进记录）。
