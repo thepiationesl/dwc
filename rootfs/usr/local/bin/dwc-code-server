@@ -8,10 +8,12 @@ command -v code-server >/dev/null 2>&1 || { echo "code-server 未安装，跳过
 mkdir -p /config/code-server
 chown -R qwe:qwe /config/code-server 2>/dev/null || true
 
+CODE_PORT="${CODE_PORT:-8443}"
+
 exec code-server \
-    --bind-addr 0.0.0.0:${CODE_PORT:-8443} \
+    --bind-addr 0.0.0.0:${CODE_PORT} \
     --user-data-dir /config/code-server \
     --auth password \
-    --port 8443 \
+    --port "${CODE_PORT}" \
     --password "${CODE_PASSWORD:-toor}" \
     /workspace

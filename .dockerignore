@@ -2,7 +2,6 @@
 .gitignore
 docs/
 refs/
-skel/
 *.md
 images/*/build
 *.log

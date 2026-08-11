@@ -3,7 +3,7 @@
 #   make list            # 列出全部镜像
 #   make build           # 构建全部镜像
 #   make build IMG=desk  # 构建单个镜像
-#   make run IMG=desk    # 运行单个镜像（交互式）
+#   make run IMG=desk    # 运行单个镜像（交互式，按镜像自动映射端口）
 #   make clean IMG=desk  # 删除镜像
 
 IMAGES = desk full lite lite-ice asbru studio py browser jump chat code build vm tor
@@ -30,14 +30,32 @@ build/%:
 	@img=$*; echo "==> 构建 $$img"
 	docker build -t $(REGISTRY)dwc-$$img:$(TAG) -f images/$$img/Dockerfile .
 
+# 按镜像类型映射端口（桌面型带 VNC/noVNC，远程型带各自服务端口）
+# 端口来自各 Dockerfile 的 EXPOSE 与各 ENV 默认值（SSH_PORT=2222 等）
 run:
-	@echo "==> 运行 $(IMG) (交互式, 端口映射见 Dockerfile EXPOSE)"
-	docker run --rm -it \
-		-p 2222:2222 \
-		-v dwc-$(IMG)-config:/config \
-		-v $$(pwd):/workspace \
-		--name dwc-$(IMG) \
-		$(REGISTRY)dwc-$(IMG):$(TAG)
+	@case "$(IMG)" in \
+	  desk|lite|lite-ice|asbru|py) \
+	    docker run --rm -it -p 2222:2222 -p 5901:5901 -p 6080:6080 \
+	      -v dwc-$(IMG)-config:/config -v $$(pwd):/workspace --name dwc-$(IMG) $(REGISTRY)dwc-$(IMG):$(TAG) ;; \
+	  full|studio) \
+	    docker run --rm -it -p 2222:2222 -p 5901:5901 -p 6080:6080 -p 3389:3389 -p 4000:4000 -p 7070:7070 \
+	      -v dwc-$(IMG)-config:/config -v $$(pwd):/workspace --name dwc-$(IMG) $(REGISTRY)dwc-$(IMG):$(TAG) ;; \
+	  code) \
+	    docker run --rm -it -p 2222:2222 -p 8443:8443 \
+	      -v dwc-$(IMG)-config:/config -v $$(pwd):/workspace --name dwc-$(IMG) $(REGISTRY)dwc-$(IMG):$(TAG) ;; \
+	  tor) \
+	    docker run --rm -it -p 2222:2222 -p 9050:9050 -p 9051:9051 -p 5353:5353 \
+	      -v dwc-$(IMG)-config:/config --name dwc-$(IMG) $(REGISTRY)dwc-$(IMG):$(TAG) ;; \
+	  vm) \
+	    docker run --rm -it -p 2222:2222 -p 5900:5900 -p 6080:6080 \
+	      -v dwc-$(IMG)-config:/config -v $$(pwd):/workspace --name dwc-$(IMG) $(REGISTRY)dwc-$(IMG):$(TAG) ;; \
+	  jump) \
+	    docker run --rm -it -p 2222:2222 \
+	      -v dwc-$(IMG)-config:/config --name dwc-$(IMG) $(REGISTRY)dwc-$(IMG):$(TAG) ;; \
+	  *) \
+	    docker run --rm -it -p 2222:2222 \
+	      -v dwc-$(IMG)-config:/config -v $$(pwd):/workspace --name dwc-$(IMG) $(REGISTRY)dwc-$(IMG):$(TAG) ;; \
+	esac
 
 clean:
 	@echo "==> 清理 $(IMG)"
