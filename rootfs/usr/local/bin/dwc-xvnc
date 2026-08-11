@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# dwc-xvnc - 启动 Xvnc（基于 Xvfb + x11vnc，或原生 Xvnc）
-# 桌面型镜像使用；通过 VNC_PASSWORD / VNC_GEOMETRY 环境变量配置
+# dwc-xvnc - 启动 Xvnc（TigerVNC 的 Xvnc 一体化：X 服务 + VNC 服务）
+# Debian/Kali 桌面镜像已装 tigervnc-standalone-server；Alpine 回退 Xvfb + x11vnc
 set -eu
 
 export DISPLAY=:1
@@ -14,30 +14,28 @@ VNC_SIZE="${VNC_GEOMETRY%x*}"
 mkdir -p /config/vnc /home/qwe/.vnc 2>/dev/null || true
 chown -R qwe:qwe /home/qwe/.vnc 2>/dev/null || true
 
-# 生成 VNC 密码文件：必须用 vncpasswd / x11vnc -storepasswd 的混淆格式，
-# 明文文件会导致 x11vnc -rfbauth / Xvnc -PasswordFile 鉴权失败
-if command -v x11vnc >/dev/null 2>&1; then
-    x11vnc -storepasswd "$VNC_PASSWORD" /config/vnc/passwd >/dev/null 2>&1 || true
-elif command -v vncpasswd >/dev/null 2>&1; then
+# 生成 VNC 密码文件（vncpasswd 格式，TigerVNC Xvnc 与 x11vnc 通用）
+# 明文文件会导致 -rfbauth / -PasswordFile 鉴权失败
+if command -v vncpasswd >/dev/null 2>&1; then
     printf '%s\n' "$VNC_PASSWORD" | vncpasswd -f > /config/vnc/passwd 2>/dev/null || true
+elif command -v x11vnc >/dev/null 2>&1; then
+    x11vnc -storepasswd "$VNC_PASSWORD" /config/vnc/passwd >/dev/null 2>&1 || true
 fi
 chmod 600 /config/vnc/passwd
 
-# 优先原生 Xvnc（Xvfb 的桌面版），否则回退 Xvfb + x11vnc
+# 优先原生 Xvnc（TigerVNC，提供 X 显示 + VNC 服务一体化）
 if command -v Xvnc >/dev/null 2>&1; then
     exec Xvnc :1 -geometry "$VNC_SIZE" -depth "$VNC_DEPTH" \
-        -PasswordFile /config/vnc/passwd -localhost -rfbport "${VNC_PORT:-5901}"
+        -rfbauth /config/vnc/passwd -localhost -rfbport "${VNC_PORT:-5901}"
 else
-    # Xvfb 启动虚拟显示
+    # Alpine 回退：Xvfb 虚拟显示 + x11vnc
     Xvfb :1 -screen 0 "${VNC_SIZE}x${VNC_DEPTH}" -nolisten tcp &
     XVFB_PID=$!
     trap 'kill $XVFB_PID 2>/dev/null || true' EXIT
-    # 等待 Xvfb 就绪
     for _ in $(seq 1 20); do
         xdpyinfo -display :1 >/dev/null 2>&1 && break
         sleep 0.3
     done
-    # 以 qwe 用户启动 x11vnc（密码从文件读取）
     exec x11vnc -display :1 -forever -shared -rfbauth /config/vnc/passwd \
         -rfbport "${VNC_PORT:-5901}"
 fi
