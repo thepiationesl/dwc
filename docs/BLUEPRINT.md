@@ -78,7 +78,7 @@
 | `chat` | Alpine | pidgin + HexChat（icewm） | VNC / noVNC（轻量） |
 | `code` | Debian slim | vscode 网页版 | 浏览器访问 |
 | `build` | Debian slim | Docker CLI 构建 | 无桌面 |
-| `vm` | Debian slim | QEMU 虚拟机 | Web/串口 |
+| `vm` | Debian slim | QEMU 虚拟机（未实现，仅预装 qemu 二进制）| Web/串口 |
 | `tor` | Alpine | Tor 匿名上网 | 无桌面 |
 
 #### browser（浏览器隔离）
@@ -97,7 +97,7 @@
 #### build（Docker CLI 构建）
 - 构建要连宿主 docker，避免宿主环境变脏，带 docker cli 的独立容器
 
-#### vm（QEMU 虚拟机）
+#### vm（QEMU 虚拟机，待实现）
 - dockur/windows 不自由、不能随时改配置，做类 VMware 热插拔可改配置方案
 
 #### tor（Tor 匿名上网）
@@ -222,5 +222,5 @@ supervisorctl stop dropbear
 | chat | ~150MB | 聊天通信 |
 | code | ~400MB | vscode 网页版 |
 | build | ~200MB | Docker 构建 |
-| vm | ~300MB | QEMU 虚拟机 |
+| vm | ~300MB | QEMU 虚拟机（待实现）|
 | tor | ~200MB | 匿名上网 |

@@ -1,10 +1,10 @@
 # vm - QEMU 虚拟机容器
-# dockur/windows 不自由、不能随时改配置，做类 VMware 热插拔可改配置方案
+# 当前仅预装 qemu 二进制；VM 启动 / Web 控制台（dockur 反向热插拔方案）尚未实现
 FROM debian:stable-slim
 
 LABEL org.dwc.image="vm" \
       org.dwc.role="functional" \
-      org.dwc.desc="QEMU 虚拟机容器（Web/串口访问）"
+      org.dwc.desc="QEMU 虚拟机容器（仅预装 qemu，启动逻辑待实现）"
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV LANG=en_US.UTF-8 TZ=UTC
@@ -24,7 +24,7 @@ ENV ENABLE_VNC=false \
 
 VOLUME ["/config", "/workspace"]
 
-# ssh 2222 / QEMU VNC 5900 / websocket 6080
-EXPOSE 2222 5900 6080
+# ssh 2222（QEMU VNC 5900 / websockify 6080 待实现，未接 supervisord）
+EXPOSE 2222
 
 ENTRYPOINT ["/usr/local/bin/dwc-entrypoint"]

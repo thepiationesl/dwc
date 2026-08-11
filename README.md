@@ -46,7 +46,7 @@ dwc/
 | chat | Alpine | 功能 | VNC / noVNC (IceWM) |
 | code | Debian slim | 功能 | code-server 8443 + SSH |
 | build | Debian slim | 功能 | SSH (连宿主 docker) |
-| vm | Debian slim | 功能 | QEMU VNC 5900 + SSH |
+| vm | Debian slim | 功能 | 仅预装 qemu（VM 启动 / Web 控制台未实现）|
 | tor | Alpine | 功能 | Tor SOCKS5 9050 + SSH |
 
 ## 设计原则
