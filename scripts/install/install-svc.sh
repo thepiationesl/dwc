@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # install-svc.sh - 服务型功能镜像安装
-# 用法：install-svc.sh <browser|chat|code|build|vm|tor>
+# 用法：install-svc.sh <browser|chat|code|build|tor>
 set -euo pipefail
 
 . "$(dirname "$0")/../common/lib.sh"
@@ -40,13 +40,6 @@ case "$SVC" in
         case "$DISTRO_FAMILY" in
             alpine) install_pkgs docker-cli docker-compose ;;
             *)      install_pkgs docker.io docker-compose-v2 2>/dev/null || true ;;
-        esac
-        ;;
-    vm)
-        # QEMU 虚拟机（参考 dockur/windows，热插拔可改配置）
-        case "$DISTRO_FAMILY" in
-            alpine) install_pkgs qemu-system-x86_64 qemu-img ;;
-            *)      install_pkgs qemu-system-x86 qemu-utils ;;
         esac
         ;;
     tor)

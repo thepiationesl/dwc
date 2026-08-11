@@ -17,7 +17,6 @@
 8. **build**：构建要连宿主 docker，但那样宿主环境特别脏、编译这个项目很麻烦，所以做了带 docker cli 的容器
 9. **py**：一个特别神人的环境，只能 Debian Python 塞进去然后正常安装 xfce 桌面
 10. **asbru**：神人软件 asbru-cm 只能在 Debian 11 上跑，又单开了容器
-11. **vm**：想开虚拟机，dockur/windows 那个不自由、不能随时改配置，想做一个像 VMware 那样可以热插拔改配置的东西
 12. **chat**：专门装 Pidgin 聊天的容器，装的是 icewm
 
 ## 三、桌面风格约定
@@ -48,7 +47,6 @@
 | `chat` | alpine-privacy-comm（Pidgin/HexChat，合并） |
 | `code` | alpine-devcontainer |
 | `build` | alpine-builder |
-| `vm` | alpine-qemu-tools |
 | `tor` | alpine-tor-browser |
 
 ### 已砍

@@ -6,7 +6,7 @@
 #   make run IMG=desk    # 运行单个镜像（交互式，按镜像自动映射端口）
 #   make clean IMG=desk  # 删除镜像
 
-IMAGES = desk full lite lite-ice asbru studio py browser jump chat code build vm tor
+IMAGES = desk full lite lite-ice asbru studio py browser jump chat code build tor
 REGISTRY ?=
 TAG ?= latest
 IMG ?= desk
@@ -46,9 +46,6 @@ run:
 	  tor) \
 	    docker run --rm -it -p 2222:2222 -p 9050:9050 -p 9051:9051 -p 5353:5353 \
 	      -v dwc-$(IMG)-config:/config --name dwc-$(IMG) $(REGISTRY)dwc-$(IMG):$(TAG) ;; \
-	  vm) \
-	    docker run --rm -it -p 2222:2222 -p 5900:5900 -p 6080:6080 \
-	      -v dwc-$(IMG)-config:/config -v $$(pwd):/workspace --name dwc-$(IMG) $(REGISTRY)dwc-$(IMG):$(TAG) ;; \
 	  jump) \
 	    docker run --rm -it -p 2222:2222 \
 	      -v dwc-$(IMG)-config:/config --name dwc-$(IMG) $(REGISTRY)dwc-$(IMG):$(TAG) ;; \

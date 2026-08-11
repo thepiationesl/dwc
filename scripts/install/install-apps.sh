@@ -62,14 +62,6 @@ install_app() {
         rosegarden)
             install_pkgs rosegarden jackd1
             ;;
-        qemu)
-            install_pkgs qemu-system-x86 qemu-utils
-            ;;
-        docker-cli)
-            # build 容器：仅客户端，连宿主 docker
-            install_pkgs docker-cli 2>/dev/null || \
-                install_pkgs docker.io 2>/dev/null || true
-            ;;
         *)
             echo "!! [dwc] 未知应用: $app"
             exit 1
