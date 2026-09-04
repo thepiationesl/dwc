@@ -129,6 +129,35 @@ jobs:
           fi
           echo "::endgroup::"
 
+
+      - name: LLM commit message enrichment (Kilocode auto-free)
+        if: failure()
+        env:
+          KILOCODE_BASE_URL: ${{ secrets.KILOCODE_BASE_URL }}
+          KILOCODE_API_KEY: ${{ secrets.KILOCODE_API_KEY }}
+        run: |
+          set -euo pipefail
+          echo "::group::Kilocode LLM attempt"
+          if [ -z "${KILOCODE_BASE_URL:-}" ] || [ -z "${KILOCODE_API_KEY:-}" ]; then
+            echo "KILOCODE secrets not set; skipping LLM enrichment"
+            exit 0
+          fi
+          # Get failing job's log tail
+          FAILED_JOB="${{ github.job }}"
+          PROMPT="Write a 1-paragraph commit-message body explaining what likely went wrong in the 'test-and-fix' job and what a follow-up PR should focus on. Be specific, no fluff."
+          RESP=$(curl -fsS "$KILOCODE_BASE_URL/chat/completions" \
+            -H "Authorization: Bearer $KILOCODE_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg p "$PROMPT" '{model:"kilo-auto/free",messages:[{role:"user",content:$p}],temperature:0.3,max_tokens:200}')" \
+            |  jq -r '.choices[0].message.content // "(no content)"')
+          {
+            echo "### Kilocode LLM analysis"
+            echo ""
+            echo "$RESP"
+            echo ""
+            echo "_Generated from job=$FAILED_JOB, run=${{ github.run_id }}_"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::endgroup::"
       - name: Summary
         if: always()
         run: |

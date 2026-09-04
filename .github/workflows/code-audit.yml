@@ -168,6 +168,44 @@ jobs:
           # Output report
           cat "$REPORT"
 
+
+      - name: LLM findings summary (Kilocode auto-free)
+        if: always()
+        env:
+          KILOCODE_BASE_URL: ${{ secrets.KILOCODE_BASE_URL }}
+          KILOCODE_API_KEY: ${{ secrets.KILOCODE_API_KEY }}
+        run: |
+          set -euo pipefail
+          echo "::group::Kilocode LLM summary"
+          if [ -z "${KILOCODE_BASE_URL:-}" ] || [ -z "${KILOCODE_API_KEY:-}" ]; then
+            echo "KILOCODE secrets not set; skipping LLM summary"
+            exit 0
+          fi
+          if ! grep -qE 'WARN|CRITICAL' audit-report.md; then
+            echo "no findings; skipping LLM summary"
+            exit 0
+          fi
+          PROMPT=$(cat <<EOF
+You are reviewing a code audit report. Summarize the top 3 actionable issues in ≤120 words, prioritized by severity. End with 1 short imperative sentence for the operator.
+
+Report:
+$(cat audit-report.md | head -120)
+EOF
+)
+          SUMMARY=$(curl -fsS "$KILOCODE_BASE_URL/chat/completions" \
+            -H "Authorization: Bearer $KILOCODE_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg p "$PROMPT" '{model:"kilo-auto/free",messages:[{role:"user",content:$p}],temperature:0.3,max_tokens:300}')" \
+            |  jq -r '.choices[0].message.content // "(no content)"')
+          {
+            echo ""
+            echo "## 🤖 Kilocode summary"
+            echo ""
+            echo "$SUMMARY"
+          } >> audit-report.md
+          echo "OK"
+          echo "::endgroup::"
+
       - name: Upload audit report
         uses: actions/upload-artifact@v4
         with:
