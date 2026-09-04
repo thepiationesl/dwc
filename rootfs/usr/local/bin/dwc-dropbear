@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
 # dwc-dropbear - 启动 dropbear（jump 之外的容器使用）
+# 注意：如果容器同时装了 openssh-server（jump 镜像会触发），dropbear 跳过以免端口冲突
+# 跳过方式：立即 exit 0（dropbear.conf 设 autorestart=false），让 supervisor 当成"未启用"
 set -eu
 
 # 仅当 dropbear 已安装时启动；jump 镜像用 openssh-server，无 dropbear 则跳过
 command -v dropbear >/dev/null 2>&1 || { echo "dropbear 未安装，跳过"; exit 0; }
+
+# 如果 sshd 已存在并准备启动，则跳过 dropbear（jump 镜像情况）
+if command -v /usr/sbin/sshd >/dev/null 2>&1 || [ -f /usr/sbin/sshd ]; then
+    echo "openssh-server 已安装，跳过 dropbear（避免端口冲突）"
+    exit 0
+fi
 
 [ -f /config/ssh/dropbear_host_ed25519_key ] || \
     dropbearkey -t ed25519 -f /config/ssh/dropbear_host_ed25519_key

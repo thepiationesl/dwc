@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # dwc-openssh - 启动 openssh-server（jump 端口转发容器）
 # 关键：开启端口转发（-L/-R），禁用会阻碍转发的限制
+# 支持 /config/ssh/authorized_keys 公钥登录（容器外 mount 进来）
 set -eu
 
 # 仅当 sshd 已安装时启动；桌面镜像只装 dropbear，无 sshd 则跳过
@@ -10,12 +11,24 @@ mkdir -p /run/sshd /config/ssh
 [ -f /config/ssh/ssh_host_ed25519_key ] || ssh-keygen -q -t ed25519 -f /config/ssh/ssh_host_ed25519_key -N ""
 [ -f /config/ssh/ssh_host_rsa_key ] || ssh-keygen -q -t rsa -b 3072 -f /config/ssh/ssh_host_rsa_key -N ""
 
+# 公钥登录：宿主 mount 进 /config/ssh/authorized_keys 时自动注入用户家目录
+# qwe 用户的 authorized_keys 路径
+mkdir -p /home/qwe/.ssh
+if [ -f /config/ssh/authorized_keys ]; then
+    cp -f /config/ssh/authorized_keys /home/qwe/.ssh/authorized_keys
+    chmod 600 /home/qwe/.ssh/authorized_keys
+    chown qwe:qwe /home/qwe/.ssh /home/qwe/.ssh/authorized_keys 2>/dev/null || true
+fi
+
+# PasswordAuthentication 默认 yes（兼容容器内首次密码登录；安全场景建议改 no + authorized_keys）
 cat > /etc/ssh/sshd_config <<EOF2
 Port ${SSH_PORT:-2222}
 ListenAddress 0.0.0.0
 HostKey /config/ssh/ssh_host_ed25519_key
 HostKey /config/ssh/ssh_host_rsa_key
-PermitRootLogin yes
+PermitRootLogin ${PERMIT_ROOT:-yes}
+PubkeyAuthentication yes
+AuthorizedKeysFile /home/qwe/.ssh/authorized_keys
 PasswordAuthentication ${ALLOW_PASSWORD:-yes}
 AllowTcpForwarding yes
 GatewayPorts clientspecified

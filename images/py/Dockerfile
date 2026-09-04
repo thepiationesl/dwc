@@ -11,13 +11,12 @@ ENV LANG=en_US.UTF-8 TZ=UTC
 
 COPY scripts/ /opt/dwc/scripts/
 COPY rootfs/ /opt/dwc/rootfs/
-COPY skel/ /opt/dwc/skel/
 
 RUN chmod +x /opt/dwc/scripts/install/*.sh \
     && /opt/dwc/scripts/install/install-base.sh dropbear \
     && /opt/dwc/scripts/install/install-desktop.sh xfce4 \
     && /opt/dwc/scripts/install/install-apps.sh python terminator \
-    && rm -rf /opt/dwc/scripts /opt/dwc/rootfs /opt/dwc/skel
+    && rm -rf /opt/dwc/scripts /opt/dwc/rootfs
 
 ENV ENABLE_VNC=true \
     VNC_PASSWORD=114514 \

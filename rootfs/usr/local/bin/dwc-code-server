@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # dwc-code-server - 启动 code-server（code 镜像）
 # 数据存 /config（容器重置不丢），端口 8443，浏览器访问
+# 支持 HASHED_PASSWORD（推荐，hash 存镜像 layer 不暴露明文）
+# 留 --password 兼容简单场景
 set -eu
 
 command -v code-server >/dev/null 2>&1 || { echo "code-server 未安装，跳过"; exit 0; }
@@ -10,10 +12,19 @@ chown -R qwe:qwe /config/code-server 2>/dev/null || true
 
 CODE_PORT="${CODE_PORT:-8443}"
 
-exec code-server \
-    --bind-addr 0.0.0.0:${CODE_PORT} \
-    --user-data-dir /config/code-server \
-    --auth password \
-    --port "${CODE_PORT}" \
-    --password "${CODE_PASSWORD:-toor}" \
+# 优先级：HASHED_PASSWORD > PASSWORD（明文）> --password 老的 CODE_PASSWORD
+ARGS=(
+    --bind-addr "0.0.0.0:${CODE_PORT}"
+    --user-data-dir /config/code-server
+    --auth "${CODE_AUTH:-password}"
+    --port "${CODE_PORT}"
     /workspace
+)
+
+if [ -n "${HASHED_PASSWORD:-}" ]; then
+    ARGS+=(--hashed-password "${HASHED_PASSWORD}")
+elif [ -n "${CODE_PASSWORD:-}" ]; then
+    ARGS+=(--password "${CODE_PASSWORD}")
+fi
+
+exec code-server "${ARGS[@]}"

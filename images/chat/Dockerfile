@@ -1,6 +1,6 @@
 # chat - Pidgin + HexChat 聊天容器（IceWM 轻量桌面）
 # 参考 linuxserver/docker-pidgin；VNC/noVNC 轻量可选
-FROM alpine:latest
+FROM alpine:3.24
 
 LABEL org.dwc.image="chat" \
       org.dwc.role="functional" \
@@ -8,13 +8,12 @@ LABEL org.dwc.image="chat" \
 
 COPY scripts/ /opt/dwc/scripts/
 COPY rootfs/ /opt/dwc/rootfs/
-COPY skel/ /opt/dwc/skel/
 
 RUN chmod +x /opt/dwc/scripts/install/*.sh \
     && /opt/dwc/scripts/install/install-base.sh dropbear \
     && /opt/dwc/scripts/install/install-svc.sh chat \
     && /opt/dwc/scripts/install/install-desktop.sh icewm \
-    && rm -rf /opt/dwc/scripts /opt/dwc/rootfs /opt/dwc/skel
+    && rm -rf /opt/dwc/scripts /opt/dwc/rootfs
 
 ENV ENABLE_VNC=true \
     VNC_PASSWORD=114514 \

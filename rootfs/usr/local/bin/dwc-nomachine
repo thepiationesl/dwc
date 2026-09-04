@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # dwc-nomachine - 启动 NoMachine（仅 full/studio）
+# 关键：以 daemon 方式启动 nxserver，让 supervisor 能真正监控进程，
+# 进程挂掉时 autorestart=true 才能触发重启；不再用 tail -f 撑场。
 set -eu
 
 command -v /usr/NX/bin/nxserver >/dev/null 2>&1 || { echo "NoMachine 未安装，跳过"; exit 0; }
@@ -7,13 +9,16 @@ command -v /usr/NX/bin/nxserver >/dev/null 2>&1 || { echo "NoMachine 未安装�
 NOMACHINE_USER="${NOMACHINE_USER:-qwe}"
 NOMACHINE_PASSWORD="${NOMACHINE_PASSWORD:-toor}"
 
-# 确保 NX 用户存在
+# 确保 NX 用户存在（NX 自带 user db；用系统用户保持 sudo/家目录一致）
 id -u "${NOMACHINE_USER}" >/dev/null 2>&1 || {
     useradd -m -s /bin/bash "${NOMACHINE_USER}" 2>/dev/null || true
 }
 echo "${NOMACHINE_USER}:${NOMACHINE_PASSWORD}" | chpasswd 2>/dev/null || true
 
-/usr/NX/bin/nxserver --restart 2>/dev/null || true
+# 杀残留实例（首次 --daemon 起不来时回退）
+/usr/NX/bin/nxserver --shutdown 2>/dev/null || true
+sleep 1
 
-# NoMachine 前台运行（server 通过 nxserver 管理）
-exec tail -f /usr/NX/var/log/nxserver.log
+# 真正启动 nxserver（前台），supervisor 通过它判定存活
+exec /usr/NX/bin/nxserver --daemon --foreground 2>/dev/null || \
+    exec /usr/NX/bin/nxserver

@@ -1,7 +1,25 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # install-base.sh - 基础环境：supervisord、用户、/config、skel、rootfs、SSH
 # 用法：install-base.sh [dropbear|openssh]   （默认 dropbear；jump 用 openssh）
-set -euo pipefail
+# /bin/sh 兼容：调用者必须确保 bash 已装（本文件依赖 $(...) 和 set -e）
+# 我们先装 bash 再 . lib.sh
+set -eu
+
+# 先把 bash 装好：后续 install-*.sh 都靠 bash
+if command -v bash >/dev/null 2>&1; then
+    :
+else
+    case "$(. /etc/os-release 2>/dev/null && echo "${ID:-}")" in
+        alpine)
+            apk add --no-cache bash >/dev/null 2>&1 || true
+            ;;
+        debian)
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq >/dev/null 2>&1 || true
+            apt-get install -y --no-install-recommends bash >/dev/null 2>&1 || true
+            ;;
+    esac
+fi
 
 . "$(dirname "$0")/../common/lib.sh"
 
@@ -12,7 +30,9 @@ echo "==> [dwc] install-base: distro=${DISTRO_ID} family=${DISTRO_FAMILY} ssh=${
 # 基础工具与 supervisord
 case "$DISTRO_FAMILY" in
     alpine)
-        install_pkgs bash shadow su-exec tzdata ca-certificates supervisord
+        # Alpine 3.24 包名为 supervisor（历史上叫 supervisord）；兼容旧名自动 fallback
+        apk add --no-cache bash shadow su-exec tzdata ca-certificates supervisor 2>/dev/null || \
+            apk add --no-cache bash shadow su-exec tzdata ca-certificates supervisord
         ;;
     debian)
         install_pkgs bash sudo tzdata ca-certificates supervisor openssh-client
@@ -22,10 +42,9 @@ esac
 # 时区默认 UTC，可用 TZ 环境变量覆盖
 ln -sf /usr/share/zoneinfo/UTC /etc/localtime 2>/dev/null || true
 
-# 用户、目录、skel
+# 用户、目录
 setup_users
 setup_config_dir
-install_skel
 
 # SSH：常规镜像 dropbear，jump 用 openssh-server
 case "$SSH_MODE" in
@@ -35,9 +54,11 @@ case "$SSH_MODE" in
         echo "ALLOW_PASSWORD=${ALLOW_PASSWORD:-yes}" > /etc/dwc-ssh.env
         ;;
     *)
+        # Debian/Kali：dropbear；不同 distro 包名略有差异，兼容 fallback
         case "$DISTRO_FAMILY" in
             alpine) install_pkgs dropbear ;;
-            debian) install_pkgs dropbear-run ;;
+            *)      apt-get install -y --no-install-recommends dropbear 2>/dev/null || \
+                       apt-get install -y --no-install-recommends dropbear-run 2>/dev/null || true ;;
         esac
         ;;
 esac

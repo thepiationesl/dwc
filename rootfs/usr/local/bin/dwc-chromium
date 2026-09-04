@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# dwc-chromium - 启动 chromium（browser 镜像）
+# 默认带 remote debugging 端口，便于自动化/Selenium/CDP 客户端控制
+# 同时启用 headless + no-sandbox（容器内 root 必需）
+set -eu
+
+command -v chromium >/dev/null 2>&1 || command -v chromium-browser >/dev/null 2>&1 || {
+    echo "chromium 未安装，跳过"
+    exit 0
+}
+
+CHROMIUM_BIN="$(command -v chromium || command -v chromium-browser)"
+
+CHROME_DEBUG_PORT="${CHROME_DEBUG_PORT:-9222}"
+CHROME_USER_DATA="${CHROME_USER_DATA:-/config/chromium}"
+CHROME_URL="${CHROME_URL:-about:blank}"
+CHROME_ARGS="${CHROME_ARGS:-}"
+
+mkdir -p "$CHROME_USER_DATA"
+
+# 用 PUID/PGID 跑（容器内 root 时降权）
+if command -v runuser >/dev/null 2>&1 && id qwe >/dev/null 2>&1; then
+    CHROMIUM_CMD=(runuser -u qwe -- "$CHROMIUM_BIN")
+else
+    CHROMIUM_CMD=("$CHROMIUM_BIN")
+fi
+
+exec "${CHROMIUM_CMD[@]}" \
+    --headless=new \
+    --no-sandbox \
+    --disable-dev-shm-usage \
+    --disable-gpu \
+    --remote-debugging-port="$CHROME_DEBUG_PORT" \
+    --remote-debugging-address=0.0.0.0 \
+    --user-data-dir="$CHROME_USER_DATA" \
+    $CHROME_ARGS \
+    "$CHROME_URL"

@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 # dwc-xvnc - 启动 Xvnc（TigerVNC 的 Xvnc 一体化：X 服务 + VNC 服务）
 # Debian/Kali 桌面镜像已装 tigervnc-standalone-server；Alpine 回退 Xvfb + x11vnc
+# 支持 VNC_PASSWORD（读写）+ VNC_PASSWORD_RO（只读旁观）
+# 支持 VNC_OFFSET（多容器同台机器，显示号偏移避免冲突）
 set -eu
 
-export DISPLAY=:1
+# VNC_OFFSET 机制：多容器同机共存，host port 与 display 号一起错开
+VNC_OFFSET="${VNC_OFFSET:-0}"
+DISPLAY_NUM=":$((1 + VNC_OFFSET))"
+export DISPLAY="${DISPLAY_NUM}"
+
 VNC_GEOMETRY="${VNC_GEOMETRY:-1920x1200x24}"
 VNC_DEPTH="${VNC_DEPTH:-24}"
 VNC_PASSWORD="${VNC_PASSWORD:-114514}"
+VNC_PASSWORD_RO="${VNC_PASSWORD_RO:-}"
+VNC_PORT="${VNC_PORT:-5901}"
 
 # 从 VNC_GEOMETRY 剥离深度（形如 1920x1200x24 -> 1920x1200）
 VNC_SIZE="${VNC_GEOMETRY%x*}"
@@ -17,25 +25,44 @@ chown -R qwe:qwe /home/qwe/.vnc 2>/dev/null || true
 # 生成 VNC 密码文件（vncpasswd 格式，TigerVNC Xvnc 与 x11vnc 通用）
 # 明文文件会导致 -rfbauth / -PasswordFile 鉴权失败
 if command -v vncpasswd >/dev/null 2>&1; then
-    printf '%s\n' "$VNC_PASSWORD" | vncpasswd -f > /config/vnc/passwd 2>/dev/null || true
+    printf '%s\n%s\n' "$VNC_PASSWORD" "$VNC_PASSWORD" | vncpasswd -f > /config/vnc/passwd 2>/dev/null || true
+    if [ -n "$VNC_PASSWORD_RO" ]; then
+        printf '%s\n%s\n' "$VNC_PASSWORD_RO" "$VNC_PASSWORD_RO" | vncpasswd -f -ro > /config/vnc/passwd_ro 2>/dev/null || true
+    fi
 elif command -v x11vnc >/dev/null 2>&1; then
     x11vnc -storepasswd "$VNC_PASSWORD" /config/vnc/passwd >/dev/null 2>&1 || true
 fi
-chmod 600 /config/vnc/passwd
+chmod 600 /config/vnc/passwd 2>/dev/null || true
+chmod 600 /config/vnc/passwd_ro 2>/dev/null || true
 
 # 优先原生 Xvnc（TigerVNC，提供 X 显示 + VNC 服务一体化）
 if command -v Xvnc >/dev/null 2>&1; then
-    exec Xvnc :1 -geometry "$VNC_SIZE" -depth "$VNC_DEPTH" \
-        -rfbauth /config/vnc/passwd -localhost -rfbport "${VNC_PORT:-5901}"
+    # 基础参数：-localhost 强制 VNC 只接本机，noVNC/客户端走本地回环
+    # 注意：-alwaysshared / -dontdisconnect 是 vncviewer/客户端侧参数；
+    #       TigerVNC Xvnc 服务端用 -dontdisconnect 是 Xvnc 4 之后的特性，某些打包版本不支持
+    XVNC_ARGS=(
+        "${DISPLAY_NUM}"
+        -geometry "$VNC_SIZE"
+        -depth "$VNC_DEPTH"
+        -rfbauth /config/vnc/passwd
+        -localhost
+        -rfbport "${VNC_PORT}"
+        -alwaysshared
+    )
+    # 添加只读旁观密码（支持同时多人连接 + 旁观）
+    if [ -f /config/vnc/passwd_ro ]; then
+        XVNC_ARGS+=(-rfbauthro /config/vnc/passwd_ro)
+    fi
+    exec Xvnc "${XVNC_ARGS[@]}"
 else
     # Alpine 回退：Xvfb 虚拟显示 + x11vnc
-    Xvfb :1 -screen 0 "${VNC_SIZE}x${VNC_DEPTH}" -nolisten tcp &
+    Xvfb "${DISPLAY_NUM}" -screen 0 "${VNC_SIZE}x${VNC_DEPTH}" -nolisten tcp &
     XVFB_PID=$!
     trap 'kill $XVFB_PID 2>/dev/null || true' EXIT
     for _ in $(seq 1 20); do
-        xdpyinfo -display :1 >/dev/null 2>&1 && break
+        xdpyinfo -display "${DISPLAY}" >/dev/null 2>&1 && break
         sleep 0.3
     done
-    exec x11vnc -display :1 -forever -shared -rfbauth /config/vnc/passwd \
-        -rfbport "${VNC_PORT:-5901}"
+    exec x11vnc -display "${DISPLAY}" -forever -shared -rfbauth /config/vnc/passwd \
+        -rfbport "${VNC_PORT}"
 fi

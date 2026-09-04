@@ -1,6 +1,6 @@
 # tor - Tor 匿名上网容器
 # Tor 客户端 + 代理，支持 .onion 访问，防 DNS 泄漏，高匿名上网
-FROM alpine:latest
+FROM alpine:3.24
 
 LABEL org.dwc.image="tor" \
       org.dwc.role="functional" \
@@ -8,12 +8,11 @@ LABEL org.dwc.image="tor" \
 
 COPY scripts/ /opt/dwc/scripts/
 COPY rootfs/ /opt/dwc/rootfs/
-COPY skel/ /opt/dwc/skel/
 
 RUN chmod +x /opt/dwc/scripts/install/*.sh \
     && /opt/dwc/scripts/install/install-base.sh dropbear \
     && /opt/dwc/scripts/install/install-svc.sh tor \
-    && rm -rf /opt/dwc/scripts /opt/dwc/rootfs /opt/dwc/skel
+    && rm -rf /opt/dwc/scripts /opt/dwc/rootfs
 
 ENV ENABLE_VNC=false \
     ENABLE_TOR=true \

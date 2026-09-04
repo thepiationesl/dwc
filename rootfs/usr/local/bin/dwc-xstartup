@@ -11,6 +11,14 @@ for _ in $(seq 1 20); do
     sleep 0.3
 done
 
+# 启动中文输入法（若已装），需要 GTK/Qt 桌面环境
+if command -v fcitx5 >/dev/null 2>&1; then
+    nohup fcitx5 -d >/dev/null 2>&1 &
+    export GTK_IM_MODULE=fcitx
+    export QT_IM_MODULE=fcitx
+    export XMODIFIERS=@im=fcitx
+fi
+
 # 桌面选择：icewm < xfce4 < startkde
 if command -v icewm >/dev/null 2>&1; then
     exec icewm-session

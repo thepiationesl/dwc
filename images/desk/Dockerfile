@@ -9,17 +9,16 @@ LABEL org.dwc.image="desk" \
 ARG DEBIAN_FRONTEND=noninteractive
 ENV LANG=en_US.UTF-8 TZ=UTC
 
-# 复制构建资产（安装脚本 / rootfs / skel）
+# 复制构建资产（安装脚本 / rootfs）
 COPY scripts/ /opt/dwc/scripts/
 COPY rootfs/ /opt/dwc/rootfs/
-COPY skel/ /opt/dwc/skel/
 
 # 构建：基础 + 桌面 + 应用 + VNC（RUN 链式减少层级）
 RUN chmod +x /opt/dwc/scripts/install/*.sh \
     && /opt/dwc/scripts/install/install-base.sh dropbear \
     && /opt/dwc/scripts/install/install-desktop.sh xfce4 \
     && /opt/dwc/scripts/install/install-apps.sh chrome terminator vncviewer \
-    && rm -rf /opt/dwc/scripts /opt/dwc/rootfs /opt/dwc/skel
+    && rm -rf /opt/dwc/scripts /opt/dwc/rootfs
 
 # 默认参数（VNC 密码 114514，分辨率 1920x1200x24）
 ENV ENABLE_VNC=true \

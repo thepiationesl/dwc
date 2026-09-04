@@ -12,7 +12,6 @@ ENV LANG=en_US.UTF-8 TZ=UTC
 
 COPY scripts/ /opt/dwc/scripts/
 COPY rootfs/ /opt/dwc/rootfs/
-COPY skel/ /opt/dwc/skel/
 
 RUN chmod +x /opt/dwc/scripts/install/*.sh \
     && /opt/dwc/scripts/install/install-base.sh dropbear \
@@ -21,7 +20,7 @@ RUN chmod +x /opt/dwc/scripts/install/*.sh \
     && /opt/dwc/scripts/install/install-remote.sh nomachine \
     && /opt/dwc/scripts/install/install-remote.sh anydesk \
     && /opt/dwc/scripts/install/install-remote.sh xrdp \
-    && rm -rf /opt/dwc/scripts /opt/dwc/rootfs /opt/dwc/skel
+    && rm -rf /opt/dwc/scripts /opt/dwc/rootfs
 
 ENV ENABLE_VNC=true \
     VNC_PASSWORD=114514 \
