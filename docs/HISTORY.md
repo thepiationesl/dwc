@@ -251,4 +251,42 @@
 
 ---
 
-**项目启始**：~2023 年初 | **稳定版本**：2024-12 | **文档重构**：2026-08-11
+**项目启始**：~2023 年初 | **稳定版本**：2024-12 | **文档重构**：2026-08-11 | **最近迭代**：2026-09-04（YOLO mode 修复与功能补全，commit 4870d39）
+
+---
+
+## 八、最近迭代（2026-09-04 — YOLO 修复与补全）
+
+commit：`4870d39`（SSH 签名，author `thepiationesl`）
+
+#### 修复的真 bug
+
+- Alpine 镜像 build 失败：原 `#!/usr/bin/env bash` 在 alpine ash 下因 bash 未装退出 127。改为 `lib.sh` + `install-base.sh` 用 `/bin/sh`，自装 bash
+- Alpine 3.24 包名变更：`supervisord` 不存在，改 `supervisor` 加 fallback
+- Kali 包名：`dropbear-run` 不存在，改 `dropbear` 加 fallback
+- VNC 不启：`dwc-xvnc` 用了部分 TigerVNC 版本不支持的 `-dontdisconnect`，移除
+- dropbear/openssh 2222 端口冲突：`dwc-dropbear` 检测 sshd 存在则跳过；`dropbear.conf` + `openssh.conf` 改 `autorestart=unexpected` 防止 skip 时变 FATAL
+- NoMachine 占位 bug：用 `nxserver --daemon` 替代 `tail -f nxserver.log`
+
+#### 功能补全
+
+- **PUID/PGID 支持**：`lib.sh::setup_users` 接 `PUID`/`PGID` env（linuxserver 标准）
+- **Kali 中文桌面真的"中文"**：fonts-not-in-cjk + wqy + fcitx5 + rime + chinese-addons + `locale-gen zh_CN.UTF-8` + en_US.UTF-8
+- **fcitx5 autostart**：`dwc-xstartup` 检测后启动 fcitx5 daemon + 设 GTK_IM_MODULE/QT_IM_MODULE/XMODIFIERS
+- **VNC 多客户端 + view-only 旁观密码 + 多容器显示号偏移**：`VNC_PASSWORD_RO` + `-alwaysshared` + `VNC_OFFSET`
+- **chromium 镜像带 CDP**：`dwc-chromium` + `chromium.conf` + EXPOSE 9222
+- **jump 镜像公钥登录**：`/config/ssh/authorized_keys` 自动注入 qwe 家目录
+- **code-server HASHED_PASSWORD + 锁版本 4.103.0**：替换 `curl install.sh` 拉最新版
+- **alpine 锁版本 `alpine:3.24`**：防止 `:latest` 漂移
+
+#### 清理
+
+- 删除 `skel/`（13 Dockerfile 去除 `COPY skel/` + `install-base.sh` 去除 `install_skel` 函数）
+- 13 Dockerfile 注释同步更新
+
+#### 验证
+
+- `docker build dwc-jump:test` 通过；`docker run` + 同网络容器 SSH 登录成功（`qwe/toor`）
+- `docker build --no-cache dwc-desk:test` 通过（Kali + xfce4 + chrome + fcitx5）
+- 端到端 SSH 测试：qwe 用户登录、PUID/PGID=1000、sudo 组、Kali banner、`fcitx5 --version=5.1.21`、`locale -a` 显示 `zh_CN.utf8`/`en_US.utf8`
+- VNC 5901 / noVNC 6080 / SSH 2222 三端口监听中

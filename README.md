@@ -42,7 +42,7 @@ make clean IMG=desk    # 删除镜像
 
 | 镜像 | 基底 | 用途 | 远程访问 |
 |------|------|------|----------|
-| **browser** | Alpine | 无头 chromium + 隔离 | SSH 远程 |
+| **browser** | Alpine | 无头 chromium + 隔离 | SSH + DevTools（9222） |
 | **jump** | Alpine | SSH 端口转发 | SSH 远程 |
 | **chat** | Alpine | Pidgin + HexChat | VNC / noVNC |
 | **code** | Debian slim | VSCode 网页版 | 浏览器（8443） |
@@ -56,16 +56,18 @@ dwc/
 ├── Makefile                     # 构建/运行入口
 ├── images/<name>/Dockerfile     # 每个镜像的独立 Dockerfile
 ├── rootfs/                      # 覆盖进镜像的文件
-│   ├── etc/profile.d/           # dwc-env.sh 环境变量
-│   ├── etc/supervisor/          # supervisord 配置
-│   └── usr/local/bin/dwc-*      # 服务 wrapper 脚本
+│   ├── etc/profile.d/dwc-env.sh # 环境变量
+│   ├── etc/supervisor/          # supervisord 配置（每个服务一个 .conf）
+│   └── usr/local/bin/dwc-*      # 服务 launcher 脚本
 ├── scripts/                     # 构建期安装脚本
-├── skel/                        # 用户 home 骨架
+│   ├── common/lib.sh            # 共享函数（PUID/PGID、locale、包管理器）
+│   └── install/install-{base,desktop,apps,remote,svc}.sh
 ├── docs/                        # 📄 重构后的文档集
 │   ├── QUICKSTART.md            # 新手指南
 │   ├── REFERENCE.md             # 速查表
 │   ├── ARCHITECTURE.md          # 设计蓝图
-│   └── TROUBLESHOOTING.md       # 问题排除
+│   ├── TROUBLESHOOTING.md       # 问题排除
+│   └── HISTORY.md               # 演进记录
 ├── refs/                        # 外部参考
 │   └── REFS.md                  # 参考项目研究
 └── README.md                    # 本文件
@@ -76,9 +78,10 @@ dwc/
 - **无特权运行**：所有容器都可以无特权运行（安全）
 - **单职责**：每个镜像独立构建，互不依赖
 - **数据持久化**：统一挂载 `/config` 目录
-- **默认用户**：`qwe:toor`（sudo）+ `root:toor`
+- **默认用户**：`qwe:toor`（sudo）+ `root:toor`（**支持 `PUID`/`PGID` 环境变量调整**，对齐 linuxserver 标准）
 - **进程管理**：supervisord 多进程管理
 - **环境控制**：`ENABLE_*` 环境变量控制功能开关
+- **服务守护**：每个服务独立 `dwc-*` launcher；supervisor conf 用 `autorestart=unexpected` 区分"禁用"与"崩了"
 
 更多设计细节 → [ARCHITECTURE.md](docs/ARCHITECTURE.md#核心设计原则)
 
@@ -116,19 +119,21 @@ supervisorctl -S /tmp/supervisord.sock status  # 查看进程状态
 
 完整命令 → [REFERENCE.md#常用命令](docs/REFERENCE.md#常用命令)
 
-## 🔐 默认凭证（改为强密码！）
+## 🔐 默认凭证（生产必须改！）
 
 ```
 SSH / VNC / 桌面登录：
   用户：qwe       密码：toor
   用户：root      密码：toor
 
-VNC 服务密码：114514
+VNC 服务密码：114514（可同时设 VNC_PASSWORD_RO 给只读旁观）
+
+code-server 密码：默认 toor；推荐用 HASHED_PASSWORD（bcrypt hash）
 ```
 
 ⚠️ **生产环境必须更改这些默认密码**
 
-详见 → [REFERENCE.md#默认凭证](docs/REFERENCE.md#默认凭证)
+完整环境变量 → [REFERENCE.md#默认凭证](docs/REFERENCE.md#默认凭证)
 
 ## 🤝 贡献与反馈
 
@@ -138,4 +143,4 @@ VNC 服务密码：114514
 
 ---
 
-**最后更新**：2026-08-11 | **文档版本**：v2.0（完整重构）
+**最后更新**：2026-09-04（与代码 4870d39 同步）

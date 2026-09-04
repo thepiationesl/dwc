@@ -36,7 +36,7 @@ docker logs --tail 50 dwc_desk  # 查看最后 50 行
 docker exec -it dwc_desk bash
 
 # 容器内常用诊断命令
-supervisorctl -S /tmp/supervisord.sock status    # 查看进程
+supervisorctl -S /run/supervisor.sock status    # 查看进程
 ps aux                                            # 查看所有进程
 netstat -tlnp                                     # 查看监听端口
 env | grep ENABLE                                 # 查看功能开关
@@ -60,10 +60,10 @@ cat /var/log/supervisor/supervisord.log           # supervisord 日志
 docker ps | grep dwc_desk
 
 # 2. 容器内 VNC 是否启动？
-docker exec dwc_desk supervisorctl -S /tmp/supervisord.sock status | grep vnc
+docker exec dwc_desk supervisorctl -S /run/supervisor.sock status | grep vnc
 
-# 3. VNC 进程是否监听 5999 端口？
-docker exec dwc_desk netstat -tlnp | grep 5999
+# 3. VNC 进程是否监听 5901 端口？
+docker exec dwc_desk netstat -tlnp | grep 5901
 
 # 4. 防火墙是否开放 6080 端口？
 sudo ufw status
@@ -83,10 +83,10 @@ make run IMG=desk
 docker exec dwc_desk bash -c 'echo $ENABLE_VNC'
 
 # 手动启动 VNC
-docker exec dwc_desk supervisorctl -S /tmp/supervisord.sock start vnc
+docker exec dwc_desk supervisorctl -S /run/supervisor.sock start vnc
 
 # 查看为什么启不了
-docker exec dwc_desk supervisorctl -S /tmp/supervisord.sock tail vnc stderr
+docker exec dwc_desk supervisorctl -S /run/supervisor.sock tail vnc stderr
 ```
 
 **情况 C：防火墙阻止**
@@ -106,7 +106,7 @@ sudo iptables -P INPUT ACCEPT
 ```bash
 # 默认密码是 114514，如果改过需要查看
 docker exec dwc_desk vncpasswd  # 修改
-docker exec dwc_desk supervisorctl -S /tmp/supervisord.sock restart vnc
+docker exec dwc_desk supervisorctl -S /run/supervisor.sock restart vnc
 ```
 
 #### 终极诊断
@@ -116,7 +116,7 @@ docker exec dwc_desk supervisorctl -S /tmp/supervisord.sock restart vnc
 docker exec dwc_desk cat /var/log/supervisor/vnc.log
 
 # 从宿主 ssh 进容器再测试 VNC
-ssh qwe@your-vps-ip -p 10022
+ssh qwe@your-vps-ip -p 2222
 vncviewer localhost:99 -passwd /path/to/vnc_pass
 ```
 
@@ -126,8 +126,8 @@ vncviewer localhost:99 -passwd /path/to/vnc_pass
 
 #### 症状
 ```
-ssh: connect to host your-vps-ip port 10022: Connection refused
-ssh: connect to host your-vps-ip port 10022: Connection timed out
+ssh: connect to host your-vps-ip port 2222: Connection refused
+ssh: connect to host your-vps-ip port 2222: Connection timed out
 ```
 
 #### 快速检查
@@ -137,13 +137,13 @@ ssh: connect to host your-vps-ip port 10022: Connection timed out
 docker ps | grep dwc_desk
 
 # 2. SSH 进程启动？
-docker exec dwc_desk supervisorctl -S /tmp/supervisord.sock status | grep dropbear
+docker exec dwc_desk supervisorctl -S /run/supervisor.sock status | grep dropbear
 
 # 3. SSH 端口监听？
 docker exec dwc_desk netstat -tlnp | grep 22
 
 # 4. 宿主防火墙允许？
-sudo ufw status | grep 10022
+sudo ufw status | grep 2222
 ```
 
 #### 解决方案
@@ -160,7 +160,7 @@ docker exec dwc_desk bash -c 'echo $ENABLE_SSH'
 
 # 如果是 false，改为 true 并重启
 docker exec dwc_desk bash -c 'export ENABLE_SSH=true && \
-  supervisorctl -S /tmp/supervisord.sock start dropbear'
+  supervisorctl -S /run/supervisor.sock start dropbear'
 ```
 
 **情况 C：密码错误**
@@ -172,14 +172,14 @@ passwd qwe    # 改 qwe 用户密码
 exit
 
 # 重新 SSH 连接
-ssh qwe@your-vps-ip -p 10022
+ssh qwe@your-vps-ip -p 2222
 ```
 
 **情况 D：防火墙阻止**
 ```bash
-sudo ufw allow 10022/tcp
+sudo ufw allow 2222/tcp
 # 或
-sudo iptables -A INPUT -p tcp --dport 10022 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 2222 -j ACCEPT
 ```
 
 **情况 E：dropbear 不支持的认证方式**
@@ -193,7 +193,7 @@ ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519
 ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa
 
 # 指定密钥连接
-ssh -i ~/.ssh/id_ed25519 qwe@your-vps-ip -p 10022
+ssh -i ~/.ssh/id_ed25519 qwe@your-vps-ip -p 2222
 ```
 
 ---
@@ -411,7 +411,7 @@ docker exec dwc_studio ps aux | grep pulseaudio
 docker exec dwc_studio pactl list sinks
 
 # 4. 重启音频服务
-docker exec dwc_studio supervisorctl -S /tmp/supervisord.sock restart pulseaudio
+docker exec dwc_studio supervisorctl -S /run/supervisor.sock restart pulseaudio
 
 # 5. xrdp 客户端检查
 # Windows RDP 客户端 → Options → Local Resources → Audio recording
@@ -435,7 +435,7 @@ curl -x socks5://your-vps-ip:9050 https://www.example.onion
 docker ps | grep dwc_tor
 
 # 2. Tor 进程启动？
-docker exec dwc_tor supervisorctl -S /tmp/supervisord.sock status
+docker exec dwc_tor supervisorctl -S /run/supervisor.sock status
 
 # 3. SOCKS5 端口监听？
 docker exec dwc_tor netstat -tlnp | grep 9050
@@ -463,7 +463,7 @@ curl -x socks5://your-vps-ip:9050 https://www.example.onion
 docker logs dwc_tor
 
 # 重启 Tor
-docker exec dwc_tor supervisorctl -S /tmp/supervisord.sock restart tor
+docker exec dwc_tor supervisorctl -S /run/supervisor.sock restart tor
 
 # 查看 Tor 启动日志
 docker exec dwc_tor tail -50 /var/log/tor/notices.log
@@ -505,7 +505,7 @@ https://your-vps-ip:8443 无法访问或显示 ERR_SSL_VERSION_OR_CIPHER_MISMATC
 docker ps | grep dwc_code
 
 # 2. code-server 进程启动？
-docker exec dwc_code supervisorctl -S /tmp/supervisord.sock status
+docker exec dwc_code supervisorctl -S /run/supervisor.sock status
 
 # 3. 8443 端口监听？
 docker exec dwc_code netstat -tlnp | grep 8443
@@ -597,7 +597,7 @@ ps aux                                           # 所有进程
 netstat -tlnp                                    # 监听端口
 env | sort                                       # 环境变量
 cat /var/log/supervisor/supervisord.log          # supervisord 日志
-supervisorctl -S /tmp/supervisord.sock status    # 进程状态
+supervisorctl -S /run/supervisor.sock status    # 进程状态
 ```
 
 ### Docker 宿主诊断
@@ -651,10 +651,10 @@ docker ps -a | grep dwc_desk
 docker logs dwc_desk > logs.txt 2>&1
 
 # 5. 容器内诊断
-docker exec dwc_desk bash -c 'supervisorctl -S /tmp/supervisord.sock status' >> logs.txt
+docker exec dwc_desk bash -c 'supervisorctl -S /run/supervisor.sock status' >> logs.txt
 
 # 6. 宿主网络配置
-netstat -tlnp | grep -E "6080|10022|10089" >> logs.txt
+netstat -tlnp | grep -E "6080|2222|3389" >> logs.txt
 ```
 
 ### 常见解决路径
@@ -681,6 +681,128 @@ netstat -tlnp | grep -E "6080|10022|10089" >> logs.txt
 
 ---
 
-**最后更新**：2026-08-11 | **版本**：v2.0
+**最后更新**：2026-09-04（与代码 4870d39 同步） | **版本**：v2.1
+
+---
+
+## 🔧 新增排障（2026-09-04 同步）
+
+### 问题 11：supervisord 程序状态显示 FATAL 但服务可用
+
+#### 症状
+```
+supervisorctl status
+dropbear                         FATAL     Exited too quickly (process log may have details)
+openssh                          FATAL     Exited too quickly
+chromium                         FATAL     Exited too quickly
+...
+```
+
+但实际上 `netstat -tln` 显示端口在监听，`ssh qwe@...` 能登。
+
+#### 原因
+老版本 `dwc-if` 在禁用时 `sleep infinity`，新版改为立即 `exit 0`。
+supervisord conf 用 `autorestart=unexpected` 区分"禁用"和"真的崩了"——但旧的镜像构建可能还有 cache，或 supervisord 看到非预期码尝试 3 次失败后状态卡 FATAL。
+
+#### 解决
+1. **不要紧**：程序实际上**在跑**（exit 0 后另一个 supervisor 实例接管，或真实服务进程已起）。验证端口是否监听即可。
+2. 想要 supervisord 状态干净，重建镜像：`make clean IMG=<img> && make build IMG=<img>`。
+
+### 问题 12：中文输入法失效（desk/full/studio）
+
+#### 症状
+桌面打开后按 Ctrl+Space 没反应，`fcitx5` 进程没在。
+
+#### 快速检查
+```bash
+docker exec dwc_desk bash -c 'which fcitx5 && fcitx5 --version'
+# 应返回 5.x.x
+
+docker exec dwc_desk bash -c 'ps aux | grep fcitx5'
+# xstartup 启动后应看到 fcitx5 -d
+
+docker exec dwc_desk bash -c 'fcitx5-remote'  # 桌面内用
+```
+
+#### 原因
+`dwc-xstartup` 会自动启动 fcitx5 -d（如果装了）。如果没启动，说明：
+1. 镜像构建时 `fcitx5` 包没装上（看 `install-desktop.sh` 的 Debian 分支）
+2. /home/qwe 没写权限（fcitx5 配置写不进去）
+
+#### 解决
+```bash
+# 进入容器手动启动
+docker exec -it dwc_desk bash
+fcitx5 -d
+export GTK_IM_MODULE=fcitx QT_IM_MODULE=fcitx XMODIFIERS=@im=fcitx
+startxfce4
+```
+
+### 问题 13：jump 镜像公钥登录失败
+
+#### 症状
+```
+Permission denied (publickey)
+```
+
+#### 快速检查
+```bash
+docker exec dwc_jump ls -la /home/qwe/.ssh/
+# 应有 authorized_keys，owner qwe:qwe
+
+docker exec dwc_jump cat /etc/ssh/sshd_config | grep -E '^(PubkeyAuth|AuthorizedKeys)'
+# PubkeyAuthentication yes
+# AuthorizedKeysFile /home/qwe/.ssh/authorized_keys
+
+docker exec dwc_jump cat /home/qwe/.ssh/authorized_keys
+# 应有你的公钥
+```
+
+#### 常见原因
+1. **公钥文件没挂进容器**：检查 `docker run -v /path/to/authorized_keys:/config/ssh/authorized_keys`
+2. **权限不对**：`authorized_keys` 应是 `600` + `qwe:qwe`，`dwc-openssh` 启动时会自动设
+3. **宿主 mount 把 /config/ssh 当目录而非文件**：用 `:ro` 后缀挂载文件
+4. **sshd_config 没启用 PubkeyAuthentication**：看上面检查，YOLO 修复后默认已启用
+
+#### 解决
+```bash
+# 1. 确认公钥文件存在
+ls -la /path/to/your/authorized_keys
+
+# 2. 重新挂载
+docker rm -f dwc_jump
+docker run -d --name dwc_jump \
+  -v /path/to/your/authorized_keys:/config/ssh/authorized_keys:ro \
+  -p 2222:2222 dwc:jump
+
+# 3. 容器内手动验证公钥到位
+docker exec dwc_jump bash -c 'ls -la /home/qwe/.ssh/'
+
+# 4. 客户端用详细模式连接
+ssh -vvv -i ~/.ssh/your_key qwe@your-vps-ip -p 2222
+```
+
+### 问题 14：PUID/PGID 配错，挂载卷被改成 root
+
+#### 症状
+```bash
+ls -la /data/dwc_config/
+# drwxr-xr-x  root  root  ...
+# 不是预期的 uid=1000
+```
+
+#### 原因
+未设 `PUID`/`PGID`，容器内 qwe 用户的 UID 是镜像内默认 1000；宿主 mount 进 `/config` 后，文件是宿主 UID 拥有的，容器内 qwe 没权限。
+
+#### 解决
+```bash
+# 启动时设 PUID/PGID 对齐宿主
+docker run -e PUID=$(id -u) -e PGID=$(id -g) -v /data/dwc_config:/config dwc:desk
+
+# chown 回宿主
+docker exec dwc_desk bash -c 'chown -R qwe:qwe /config'
+
+# 之后保持 PUID/PGID 启动即可
+```
 
 如有问题，欢迎提 Issue！

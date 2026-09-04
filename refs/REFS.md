@@ -1,7 +1,7 @@
 # REFS - 参考项目研究笔记
 
 > 用途：dwc 各镜像脚本落笔前的参考对照清单，避免踩老版本 / 过时方案的坑。
-> 更新日期：2026-08-10（最近复核：2026-08-11，随 vm 移出仓库同步修订）
+> 更新日期：2026-09-04（与代码 4870d39 同步；PUID/PGID、fcitx5、chromium CDP 等 linuxserver 模式已落地）
 
 ## 〇、远程访问分级原则（重要）
 
@@ -24,12 +24,13 @@
 | linuxserver/docker-pidgin | `chat` | Pidgin 聊天 |
 | (HexChat / tor 单应用) | `chat` / `tor` | 同类单应用容器思路 |
 
-**linuxserver 通用模式（值得全项目借鉴）**：
+**linuxserver 通用模式（已实现部分）**：
 
-- PUID/PGID 用户映射、`/config` 持久化
-- s6-overlay 作为 init（无特权友好）
-- 环境变量开关功能（ENABLE_*）
-- 容器为单一应用服务，扩展用 DOCKER_MODS
+- PUID/PGID 用户映射 ✅（`lib.sh::setup_users`，默认 1000）
+- `/config` 持久化 ✅
+- s6-overlay 作为 init ❌（dwc 用 supervisord；REFS.md §〇 已记录此设计取舍）
+- 环境变量开关功能（ENABLE_*） ✅
+- 容器为单一应用服务 + DOCKER_MODS 扩展 ❌（dwc 故意"重"镜像，独立 per-image 配置）
 
 ## 二、核心参考（直接学习实现）
 
@@ -119,6 +120,6 @@
 
 ## 六、待补调研（后续脚本落到哪个模块再深挖）
 
-- [ ] tor + 浏览器隔离：参考 browser 容器方案的网络安全细节
+- [x] tor + 浏览器隔离：参考 browser 容器方案的网络安全细节（`browser` 镜像已支持 headless + remote-debugging；tor 走 SOCKS5 配合 HTTP_PROXY 使用）
 - [x] ~~QEMU 热插拔方案~~：vm 已移出本仓库，单开仓库重做，调研随之迁移（见虚拟化类存档）
-- [ ] rustdesk 自建服务端（如替代 Anydesk）
+- [ ] rustdesk 自建服务端（如替代 Anydesk）：**待跟进**，社区方案（`andrey15054/RustDeskDocker`、`Lanjelin/docker-remote-desktop`）评估中

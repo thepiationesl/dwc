@@ -48,13 +48,18 @@ make run IMG=desk
 http://your-vps-ip:6080
 
 # 或 SSH 进入
-ssh qwe@your-vps-ip -p 10022
+ssh qwe@your-vps-ip -p 2222
 ```
 
 **默认凭证**：
 ```
 VNC：密码 114514
 SSH：qwe / toor
+```
+
+**配置 PUID/PGID**（让挂载卷权限与宿主一致）：
+```bash
+docker run -e PUID=$(id -u) -e PGID=$(id -g) -v /data/dwc:/config dwc:desk
 ```
 
 ---
@@ -74,7 +79,7 @@ SSH：qwe / toor
 make build IMG=studio
 make run IMG=studio
 
-# 用 RDP 客户端连接 your-vps-ip:10089（有声音）
+# 用 RDP 客户端连接 your-vps-ip:3389（有声音）
 # 或用 NoMachine 客户端连接 your-vps-ip:4000（有声音）
 ```
 
@@ -93,7 +98,8 @@ VNC：密码 114514（无声音）
 为什么：
 - VSCode 网页版（code-server），开浏览器即用
 - `/config` 持久化，容器删了代码还在
-- 镜像约 400MB
+- **支持 `HASHED_PASSWORD`（bcrypt hash），密码不进镜像 layer**
+- 镜像约 450MB
 
 ```bash
 make build IMG=code
@@ -102,8 +108,8 @@ make run IMG=code
 # 浏览器打开
 https://your-vps-ip:8443
 
-# 首次访问会提示输入密码，默认密码在容器日志里
-docker logs dwc_code | grep "token:"
+# 默认密码 = toor；推荐用 HASHED_PASSWORD（构建时注入更安全）：
+docker run -e HASHED_PASSWORD='$2a$10$...' dwc:code
 ```
 
 ---
@@ -137,14 +143,30 @@ make run IMG=tor
 为什么：
 - 用 openssh-server（dropbear 不支持端口转发 `-L/-R`）
 - 用来做 SSH 隧道中转、VPN 替代
-- 镜像超轻量，仅 50MB
+- **支持 `/config/ssh/authorized_keys` 公钥登录**
+- 镜像超轻量，仅 ~100MB
 
 ```bash
 make build IMG=jump
 make run IMG=jump
 
 # 设置 SSH 隧道（比如转发本地 8080 到内网 192.168.1.100:8080）
-ssh qwe@your-vps-ip -p 10022 -L 8080:192.168.1.100:8080 -N
+ssh qwe@your-vps-ip -p 2222 -L 8080:192.168.1.100:8080 -N
+```
+
+**生产建议**：禁用密码登录，只用公钥：
+```bash
+# 宿主机生成密钥
+ssh-keygen -t ed25519 -f ~/.ssh/dwc_jump_key
+
+# 把公钥挂进容器
+docker run -p 2222:2222 \
+  -v ~/.ssh/dwc_jump_key.pub:/config/ssh/authorized_keys:ro \
+  -e ALLOW_PASSWORD=no \
+  dwc:jump
+
+# 客户端密钥登录
+ssh -i ~/.ssh/dwc_jump_key qwe@your-vps-ip -p 2222
 ```
 
 ---
@@ -203,9 +225,9 @@ make build IMG=desk
 make run IMG=desk
 
 # Makefile 会自动映射端口：
-#   VNC: 6080 (noVNC 网页)
-#   SSH: 10022
-#   XVFB: 5999
+#   VNC:   5901（容器内，仅 localhost；noVNC 走 6080）
+#   noVNC: 6080（浏览器访问）
+#   SSH:   2222（dropbear）
 ```
 
 ### **步骤 4：访问桌面**
@@ -218,15 +240,17 @@ http://your-vps-ip:6080
 
 **方式 B - SSH**
 ```bash
-ssh qwe@your-vps-ip -p 10022
-密码：toor
+ssh qwe@your-vps-ip -p 2222
+# 密码：toor
 ```
 
-**方式 C - VNC 客户端（RealVNC / Krdesktop）**
+**方式 C - VNC 客户端（RealVNC / TigerVNC）**
 ```
-地址：your-vps-ip:5999
+地址：your-vps-ip:5901
 密码：114514
 ```
+
+> 注意：VNC 端口在 `dwc-xvnc` 里加了 `-localhost`，**VNC 直连会被拒绝**，需要先 SSH 端口转发或走 noVNC。
 
 ### **步骤 5：配置与扩展**
 
@@ -335,3 +359,7 @@ docker exec dwc_desk bash -c 'export ENABLE_SSH=false; supervisorctl -S /tmp/sup
 ---
 
 **提示**：大多数用户选 `desk` 或 `lite`，跑起来试试，有问题再查具体文档。祝用得舒服！🎉
+
+---
+
+**最后更新**：2026-09-04（与代码 4870d39 同步）

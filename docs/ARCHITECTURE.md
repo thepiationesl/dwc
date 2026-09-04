@@ -118,7 +118,7 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]
 - **RUN 链式**：合并命令减少层级
 - **清理缓存**：`rm -rf /var/lib/apt/lists/* /var/cache/apt/*`
 - **COPY 顺序**：脚本 → 配置 → 应用（便于缓存利用）
-- **用户映射**：`PUID:PGID` 恒为 `1000:1000`
+- **用户映射**：`PUID` / `PGID` 默认 `1000:1000`；可通过环境变量调整对齐宿主 UID，避免挂卷后宿主目录被改成 root
 
 ### 3.2 环境变量与功能开关
 
@@ -127,74 +127,78 @@ CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]
 ```bash
 # /etc/profile.d/dwc-env.sh 自动加载
 export LANG=${LANG:-en_US.UTF-8}
+export LC_ALL=${LC_ALL:-en_US.UTF-8}
 export TZ=${TZ:-UTC}
 export DEBUG=${DEBUG:-0}
 export PUID=${PUID:-1000}
 export PGID=${PGID:-1000}
 ```
 
+> 桌面型镜像（desk/full/studio/lite/lite-ice/asbru/py）已生成 `zh_CN.UTF-8` + `en_US.UTF-8` locale；改 `LANG=zh_CN.UTF-8` 即可中文显示。
+
 #### 服务开关机制
 
-```bash
-# supervisord 配置示例
-[program:vnc]
-command=/usr/local/bin/dwc-if ENABLE_VNC /usr/bin/vncserver ...
-autorestart=true
+每个服务一个 supervisord program，通过 `dwc-if ENABLE_X` wrapper 决定启动或跳过。
 
-# dwc-if 脚本逻辑
-#!/bin/bash
-ENABLE_VAR=$1
-if [ "$ENABLE_VAR" = "true" ] || [ "$ENABLE_VAR" = "1" ]; then
-    shift
-    exec "$@"  # 执行服务
-else
-    sleep infinity  # 禁用则永久休眠
+**dwc-if 实现**（`rootfs/usr/local/bin/dwc-if`）：
+```bash
+#!/usr/bin/env bash
+VAR_NAME="$1"; shift
+case "${!VAR_NAME:-false}" in
+    true|1|yes|TRUE|YES|on) ;;
+    *) exit 0 ;;            # 禁用：立即 exit 0
+esac
+exec "$@"                   # 启用：exec 真实服务进程
+```
+
+**典型 supervisord program**（`rootfs/etc/supervisor/conf.d/dropbear.conf`）：
+```ini
+[program:dropbear]
+command=/usr/local/bin/dwc-if ENABLE_SSH /usr/local/bin/dwc-dropbear
+autostart=true
+autorestart=unexpected      # 关键：禁用时 exit 0 不算 "unexpected"，不会被错误重启
+startretries=3
+priority=5
+```
+
+**`dwc-dropbear`** 还会在自身检测 sshd 是否存在——避免 `desk`/`full` 等镜像既装 dropbear 又装 openssh 时端口冲突：
+```bash
+if command -v /usr/sbin/sshd >/dev/null 2>&1; then
+    echo "openssh-server 已安装，跳过 dropbear（避免端口冲突）"
+    exit 0
 fi
 ```
 
 **工作流**：
-1. 环境变量注入（docker run -e / docker update --env）
-2. supervisord 启动时读取
-3. dwc-if wrapper 检查 ENABLE_* 决定是否启动
-4. 可以通过 supervisorctl 动态启停
+1. 环境变量注入（`docker run -e` / `docker update --env`）
+2. `dwc-entrypoint` 加载 `dwc-env.sh` 并 `exec supervisord`
+3. supervisord 启动时读取 `conf.d/*.conf`
+4. 每个 program 的 `dwc-if` 检查 `ENABLE_*` 决定启动真实服务
+6. 可以通过 `supervisorctl -c /etc/supervisord.conf` 动态启停
+
+> 早期版本 `dwc-if` 在禁用时 `sleep infinity`，会让 supervisord 把"禁用"当成"进程存在"。新版立即 `exit 0`，配合 `autorestart=unexpected`，supervisord 才能区分"禁用"与"崩了"。
 
 ### 3.3 Shell 环境统一
 
-#### 模板机制（skel/）
+#### 用户配置（lib.sh::setup_users）
 
-```
-skel/
-├─ .bashrc       ← 通用 bash 配置
-├─ .profile      ← 通用 shell 初始化
-└─ README        ← 说明
-```
-
-**应用方式**：
-```dockerfile
-RUN cp -r /etc/skel/* /home/qwe/
-RUN chown -R qwe:qwe /home/qwe
-```
-
-**例外**：Kali 保留原生 shell 配置（已集成 zsh + 主题）
+不再有 `skel/` 模板。`lib.sh::setup_users` 直接建用户 + chpasswd + sudoers 配置，幂等。
 
 ### 3.4 安装脚本复用（scripts/）
 
 ```
 scripts/
-├─ common/
-│   └─ lib.sh              ← 通用函数库
-├─ install-desktop.sh      ← xfce4 桌面
-├─ install-icewm.sh        ← icewm 桌面
-├─ install-vnc.sh          ← VNC 服务
-├─ install-ssh.sh          ← SSH 服务
-├─ install-xrdp.sh         ← xrdp 服务
-└─ ...
-```
-
-**原则**：
+├─ common/lib.sh                    ← POSIX sh 兼容；PUID/PGID、locale、包管理器封装
+├─ install/install-base.sh         ← 基础环境：supervisord、用户、SSH
+├─ install/install-desktop.sh      ← xfce4 / icewm + VNC + 中文支持
+├─ install/install-apps.sh         ← chrome / vncviewer / python / asbru 等应用
+├─ install/install-remote.sh       ← NoMachine / xrdp / Anydesk
+└─ install/install-svc.sh          ← chromium / pidgin / code-server / docker / tor
+```**原则**：
 - 脚本可被多个 Dockerfile COPY 调用
 - 脚本内容幂等（重复运行结果一致）
 - 脚本完成后自删（减少镜像大小）
+- 所有脚本 `/bin/sh` 兼容（Alpine ash / Debian dash / Kali bash 均可用）；自装 bash
 
 ---
 
@@ -217,9 +221,9 @@ scripts/
 
 **远程访问**：
 - VNC/noVNC（6080）← 中文最稳定
-- SSH（10022）
+- SSH（**2222**，dropbear 或 openssh）
 
-**镜像大小**：~700MB
+**镜像大小**：~2.6GB
 
 **使用建议**：
 - 首次用户从这个开始
@@ -242,9 +246,9 @@ scripts/
 - xrdp（10089）← RDP 客户端，有声音（需 xrdp-pulseaudio）
 - NoMachine（4000）← 有声音
 - Anydesk（7070）← 动态端口
-- SSH（10022）
+- SSH（**2222**，dropbear 或 openssh）
 
-**镜像大小**：~1200MB
+**镜像大小**：~2.8GB
 
 **使用场景**：
 - 朋友定制版，Kali 完整但不要音乐工作站
@@ -263,9 +267,9 @@ scripts/
 
 **远程访问**：
 - VNC/noVNC（6080）
-- SSH（10022）
+- SSH（**2222**，dropbear 或 openssh）
 
-**镜像大小**：~500MB
+**镜像大小**：~550MB
 
 #### lite-ice（Debian slim 极低配桌面 - IceWM）
 
@@ -279,9 +283,9 @@ scripts/
 
 **远程访问**：
 - VNC/noVNC（6080）（Xvfb + x11vnc）
-- SSH（10022）
+- SSH（**2222**，dropbear 或 openssh）
 
-**镜像大小**：~480MB
+**镜像大小**：~550MB
 
 #### asbru（Debian 11 + asbru-cm）
 
@@ -296,9 +300,9 @@ scripts/
 
 **远程访问**：
 - VNC/noVNC（6080）
-- SSH（10022）
+- SSH（**2222**，dropbear 或 openssh）
 
-**镜像大小**：~520MB
+**镜像大小**：~600MB
 
 #### studio（Kali 音乐工作站）
 
@@ -320,12 +324,12 @@ scripts/
 
 **远程访问**：
 - VNC/noVNC（6080，无声音）
-- xrdp（10089，**有声音**）← 推荐用于音乐工作
+- xrdp（**3389**，**有声音**）← 推荐用于音乐工作
 - NoMachine（4000，**有声音**）
 - Anydesk（7070，**有声音**）
-- SSH（10022）
+- SSH（**2222**，dropbear 或 openssh）
 
-**镜像大小**：~900MB
+**镜像大小**：~2.8GB
 
 **使用建议**：
 - 做音乐/视频必须用 xrdp 或 NoMachine，VNC 听不到声音
@@ -345,7 +349,7 @@ scripts/
 
 **远程访问**：
 - VNC/noVNC（6080）
-- SSH（10022）
+- SSH（**2222**，dropbear 或 openssh）
 
 **镜像大小**：~600MB
 
@@ -363,15 +367,22 @@ scripts/
 - 可与 tor 容器组合，访问 .onion
 
 **远程访问**：
-- SSH（10022）
-- 需要 X11 转发或 VNC：`ssh -X ...` 打开图形应用
+- SSH（**2222**，dropbear）
+- chromium DevTools Protocol（**9222**，Selenium/Playwright/CDP 客户端可用）
 
 **镜像大小**：~150MB
 
 **使用例**：
 ```bash
-# 设置 Tor 代理
-docker run -e TOR_SOCKS_HOST=dwc_tor -e TOR_SOCKS_PORT=9050 dwc:browser
+# 1. 启 chromium（默认 headless + remote-debugging）
+make run IMG=browser
+
+# 2. 用任何 CDP 客户端（Selenium/Playwright/Puppeteer）连接：
+#    http://your-vps-ip:9222/json
+curl http://your-vps-ip:9222/json/version
+
+# 3. 与 tor 容器组合：HTTP_PROXY=socks5://dwc_tor:9050
+docker run --network dwc-network   -e CHROME_URL=https://check.torproject.org/api/ip   dwc:browser
 ```
 
 #### jump（SSH 端口转发）
@@ -388,7 +399,7 @@ docker run -e TOR_SOCKS_HOST=dwc_tor -e TOR_SOCKS_PORT=9050 dwc:browser
 **远程访问**：
 - SSH（10022，支持 `-L/-R/-D` 端口转发）
 
-**镜像大小**：~50MB（最轻量）
+**镜像大小**：~100MB（最轻量）
 
 **使用例**：
 ```bash
@@ -413,7 +424,7 @@ ssh qwe@your-vps-ip -p 10022 -R 8888:localhost:8888 -N
 
 **远程访问**：
 - VNC/noVNC（6080）
-- SSH（10022）
+- SSH（**2222**，dropbear 或 openssh）
 
 **镜像大小**：~150MB
 
@@ -424,16 +435,17 @@ ssh qwe@your-vps-ip -p 10022 -R 8888:localhost:8888 -N
 **基底**：Debian 12 slim
 
 **特点**：
-- code-server（VSCode Web 版）
+- code-server（VSCode Web 版），**锁定版本 4.103.0**（构建期从 GitHub release tarball 下载，避免每次拉最新版不可复现）
 - HTTPS 8443
 - `/config` 持久化，容器删了代码还在
-- SSH（可选）
+- **支持 `HASHED_PASSWORD`（bcrypt hash），密码不进镜像 layer**
+- SSH（可选，dropbear）
 
 **远程访问**：
 - HTTPS（8443，浏览器访问）
-- SSH（10022）
+- SSH（**2222**，dropbear 或 openssh）
 
-**镜像大小**：~400MB
+**镜像大小**：~450MB
 
 **使用例**：
 ```bash
@@ -455,10 +467,10 @@ make run IMG=code
 - 无图形界面
 
 **远程访问**：
-- SSH（10022）
+- SSH（**2222**，dropbear 或 openssh）
 - Docker socket（`/var/run/docker.sock` 挂载）
 
-**镜像大小**：~200MB
+**镜像大小**：~250MB
 
 **使用例**：
 ```bash
@@ -485,10 +497,10 @@ docker push myapp:latest
 
 **远程访问**：
 - SOCKS5（9050，其他容器/本地客户端可连）
-- SSH（10022）
+- SSH（**2222**，dropbear 或 openssh）
 - 控制端口（9051，仅容器内）
 
-**镜像大小**：~200MB
+**镜像大小**：~250MB
 
 **使用例**：
 ```bash
@@ -616,4 +628,4 @@ docker-compose restart
 
 ---
 
-**最后更新**：2026-08-11 | **版本**：v2.0
+**最后更新**：2026-09-04（与代码 4870d39 同步） | **版本**：v2.1
