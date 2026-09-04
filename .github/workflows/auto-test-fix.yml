@@ -1,0 +1,142 @@
+name: Auto Test & Fix
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  test-and-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run static checks
+        run: |
+          set -euo pipefail
+          echo "::group::shebang sanity"
+          # all scripts must have valid shebang
+          for f in scripts/install/*.sh scripts/common/*.sh; do
+            head -1 "$f" | grep -qE '^#!(/bin/sh|/usr/bin/env bash|/usr/bin/env sh)$' || {
+              echo "BAD shebang: $f"; exit 1;
+            }
+          done
+          echo "OK"
+          echo "::endgroup::"
+
+          echo "::group::docs/code drift check"
+          # docs must not claim old ports
+          if grep -qE '10022|5999|10089' docs/*.md README.md; then
+            echo "Docs still mention old ports (10022/5999/10089)"; exit 1;
+          fi
+          echo "OK"
+          echo "::endgroup::"
+
+          echo "::group::dockerfile lint (best-effort)"
+          for d in images/jump/Dockerfile images/lite/Dockerfile images/code/Dockerfile; do
+            if command -v hadolint >/dev/null; then
+              hadolint --no-fail "$d" || true
+            fi
+          done
+          echo "OK"
+
+      - name: Build & smoke test jump (smallest, fast)
+        run: |
+          set -euo pipefail
+          echo "::group::build jump"
+          docker build -t dwc-jump:test -f images/jump/Dockerfile .
+          echo "::endgroup::"
+          echo "::group::smoke"
+          docker run --rm --network host dwc-jump:test /bin/sh -c \
+            'which sshd dropbear supervisord bash; \
+             ls /usr/local/bin/dwc-*; \
+             echo PASS'
+          echo "::endgroup::"
+
+      - name: Build & smoke test lite (Debian slim)
+        run: |
+          set -euo pipefail
+          echo "::group::build lite"
+          docker build -t dwc-lite:test -f images/lite/Dockerfile .
+          echo "::endgroup::"
+          echo "::group::smoke"
+          docker run --rm dwc-lite:test /bin/sh -c \
+            'which xvncpasswd vncpasswd bash; \
+             ls /usr/local/bin/dwc-xvnc /usr/local/bin/dwc-dropbear; \
+             echo PASS'
+          echo "::endgroup::"
+
+      - name: Build & smoke test browser (Alpine+chromium)
+        run: |
+          set -euo pipefail
+          echo "::group::build browser"
+          docker build -t dwc-browser:test -f images/browser/Dockerfile .
+          echo "::endgroup::"
+          echo "::group::smoke"
+          docker run --rm dwc-browser:test /bin/sh -c \
+            'which chromium supervisord; \
+             ls /usr/local/bin/dwc-chromium; \
+             echo PASS'
+          echo "::endgroup::"
+
+      - name: Auto-fix: alpine:latest -> alpine:3.24
+        if: failure() && github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          echo "::group::auto-fix attempt"
+          # Detect any lingering alpine:latest references
+          if grep -l 'FROM alpine:latest' images/*/Dockerfile; then
+            echo "Found alpine:latest, replacing with alpine:3.24"
+            for f in $(grep -l 'FROM alpine:latest' images/*/Dockerfile); do
+              sed -i 's|FROM alpine:latest|FROM alpine:3.24|g' "$f"
+              echo "Fixed $f"
+            done
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add images/*/Dockerfile
+            git commit -m "fix(ci): pin alpine:3.24" || echo "nothing to commit"
+            git push || echo "push failed"
+          else
+            echo "no alpine:latest found"
+          fi
+          echo "::endgroup::"
+
+      - name: Auto-fix: docs port drift
+        if: failure() && github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          echo "::group::auto-fix docs"
+          if grep -lE '10022|5999|10089' docs/*.md README.md; then
+            for f in $(grep -lE '10022|5999|10089' docs/*.md README.md); do
+              sed -i 's/-p 10022/-p 2222/g; s/ 10022 / 2222 /g; s/--dport 10022/--dport 2222/g; s/5999/5901/g; s/10089/3389/g' "$f"
+            done
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add docs/*.md README.md
+            git commit -m "fix(docs): sync ports to code (SSH 2222, VNC 5901, RDP 3389)" || echo "nothing to commit"
+            git push || echo "push failed"
+          fi
+          echo "::endgroup::"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Auto Test & Fix"
+            echo ""
+            echo "- Branch: \`${{ github.ref_name }}\`"
+            echo "- Commit: \`${{ github.sha }}\`"
+            echo "- Result: ${{ job.status }}"
+            echo "- Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"

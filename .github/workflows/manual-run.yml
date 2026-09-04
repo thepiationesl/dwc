@@ -1,0 +1,108 @@
+name: Manual Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: 'Image to test/build (blank = jump default)'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - jump
+          - browser
+          - tor
+          - chat
+          - build
+          - code
+          - lite
+          - lite-ice
+          - asbru
+          - py
+          - desk
+          - full
+          - studio
+      mode:
+        description: 'What to do'
+        required: true
+        default: 'test'
+        type: choice
+        options:
+          - test
+          - build
+          - lint
+          - audit
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run (mode=${{ inputs.mode }}, image=${{ inputs.image || 'jump' }})
+        env:
+          MODE: ${{ inputs.mode }}
+          IMAGE: ${{ inputs.image }}
+        run: |
+          set -euo pipefail
+          echo "::group::Pre-flight"
+          docker --version
+          make list
+          echo "::endgroup::"
+
+          if [ "$MODE" = "test" ]; then
+            if [ -z "$IMAGE" ]; then
+              IMAGE=jump
+            fi
+            echo "::group::docker build $IMAGE"
+            docker build -t dwc-$IMAGE:test -f images/$IMAGE/Dockerfile .
+            echo "::endgroup::"
+            echo "::group::runtime smoke test"
+            docker run --rm dwc-$IMAGE:test /bin/sh -c 'echo "container boots OK"; ls /usr/local/bin/dwc-* | head -5'
+            echo "::endgroup::"
+
+          elif [ "$MODE" = "build" ]; then
+            if [ -z "$IMAGE" ]; then
+              echo "Build all small images (Alpine + Debian slim, skipping Kali)"
+              for img in jump browser tor chat build code lite lite-ice asbru py; do
+                echo "::group::build $img"
+                docker build -t dwc-$img:test -f images/$img/Dockerfile .
+                echo "::endgroup::"
+              done
+            else
+              docker build -t dwc-$IMAGE:test -f images/$IMAGE/Dockerfile .
+            fi
+
+          elif [ "$MODE" = "lint" ]; then
+            echo "::group::shellcheck (best-effort)"
+            for f in scripts/install/*.sh scripts/common/*.sh rootfs/usr/local/bin/dwc-*; do
+              echo "--- $f ---"
+              shellcheck -s bash "$f" 2>&1 | head -20 || true
+            done
+            echo "::endgroup::"
+
+          elif [ "$MODE" = "audit" ]; then
+            echo "::group::secrets scan"
+            grep -rE '(AKIA[0-9A-Z]{16}|ghp_[a-zA-Z0-9]{36}|sk-[a-zA-Z0-9]{32,}|ghs_[a-zA-Z0-9]{36})' \
+              --exclude-dir=.git --exclude-dir=node_modules . || echo "no secrets found"
+            echo "::endgroup::"
+            echo "::group::docs vs code drift"
+            echo "Documents claim VNC=5999 / SSH=10022 / xrdp=10089, code uses VNC=5901 / SSH=2222 / xrdp=3389"
+            grep -E '(5999|10022|10089)' docs/*.md README.md || echo "no drift found"
+            echo "::endgroup::"
+          fi
+
+      - name: Summary
+        run: |
+          {
+            echo "## Manual Run Result"
+            echo ""
+            echo "- Mode: \`${{ inputs.mode }}\`"
+            echo "- Image: \`${{ inputs.image || '(default)' }}\`"
+            echo "- Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"

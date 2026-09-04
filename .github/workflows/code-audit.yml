@@ -1,0 +1,190 @@
+name: Weekly Code Audit
+
+on:
+  schedule:
+    # Every Monday 09:00 UTC
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+    inputs:
+      open_issue:
+        description: "Open an issue if findings exist"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run audit
+        id: audit
+        run: |
+          set -euo pipefail
+          REPORT="audit-report.md"
+          : > "$REPORT"
+
+          echo "::group::image & file inventory"
+          {
+            echo "# dwc Weekly Code Audit"
+            echo
+            echo "_Generated: $(date -u +%FT%TZ)_"
+            echo
+            echo "## Inventory"
+            echo
+            echo "- Total images: $(ls images/ | wc -l)"
+            echo "- Scripts (install + common): $(find scripts -name '*.sh' | wc -l)"
+            echo "- rootfs launchers: $(ls rootfs/usr/local/bin/dwc-* | wc -l)"
+            echo "- Supervisor confs: $(ls rootfs/etc/supervisor/conf.d/*.conf | wc -l)"
+            echo "- Docs files: $(ls docs/*.md README.md | wc -l)"
+            echo
+            echo "## Image summary"
+            echo
+            echo "| Image | Base | EXPOSE | VOL |"
+            echo "|-------|------|--------|-----|"
+            for img in $(ls images/); do
+              base=$(grep -E '^FROM ' "images/$img/Dockerfile" | head -1 | awk '{print $2}')
+              exp=$(grep -E '^EXPOSE ' "images/$img/Dockerfile" | head -1 | sed 's/EXPOSE //')
+              vol=$(grep -E '^VOLUME ' "images/$img/Dockerfile" | head -1 | sed 's/VOLUME //')
+              echo "| $img | $base | $exp | $vol |"
+            done
+            echo
+          } >> "$REPORT"
+          echo "OK"
+          echo "::endgroup::"
+
+          echo "::group::shell scripts lint"
+          {
+            echo "## Shell script lint (best-effort)"
+            echo
+            for f in $(find scripts rootfs -name '*.sh' -o -name 'dwc-*'); do
+              issues=""
+              if [ -x "$f" ]; then :; else issues="$issues no-exec"; fi
+              first=$(head -1 "$f" 2>/dev/null)
+              if ! echo "$first" | grep -qE '^#!(/bin/sh|/bin/bash|/usr/bin/env bash|/usr/bin/env sh)'; then
+                issues="$issues bad-shebang"
+              fi
+              if grep -nE 'set -euo pipefail' "$f" >/dev/null 2>&1; then
+                # shellcheck SC2039: -o pipefail is bash-only; flag for /bin/sh files
+                if echo "$first" | grep -q '^#!/bin/sh'; then
+                  issues="$issues bash-only-set-flag-in-sh"
+                fi
+              fi
+              if [ -n "$issues" ]; then
+                echo "- \`$f\`: $issues"
+              fi
+            done
+            echo
+          } >> "$REPORT"
+          echo "OK"
+          echo "::endgroup::"
+
+          echo "::group::docs/code drift"
+          {
+            echo "## Docs vs code drift"
+            echo
+            DRIFT=0
+            # Check old ports in docs
+            for pat in '10022' '5999' '10089'; do
+              if grep -lE "$pat" docs/*.md README.md >/dev/null 2>&1; then
+                echo "- **WARN**: docs still mention port \`$pat\` (outdated):"
+                grep -lE "$pat" docs/*.md README.md | sed 's/^/  - /'
+                DRIFT=1
+              fi
+            done
+            # Check removed skel references
+            if grep -lE 'skel/' docs/*.md README.md >/dev/null 2>&1; then
+              echo "- **WARN**: docs still mention \`skel/\` (removed):"
+              grep -lE 'skel/' docs/*.md README.md | sed 's/^/  - /'
+              DRIFT=1
+            fi
+            # Check alpine:latest
+            if grep -lE '^FROM alpine:latest' images/*/Dockerfile >/dev/null 2>&1; then
+              echo "- **WARN**: Dockerfile uses \`alpine:latest\` (should pin):"
+              grep -lE '^FROM alpine:latest' images/*/Dockerfile | sed 's/^/  - /'
+              DRIFT=1
+            fi
+            if [ "$DRIFT" = "0" ]; then
+              echo "No drift found. "
+            fi
+            echo
+          } >> "$REPORT"
+          echo "OK"
+          echo "::endgroup::"
+
+          echo "::group::env vars in shell scripts not in REFERENCE.md"
+          {
+            echo "## Env vars used in scripts (vs REFERENCE.md)"
+            echo
+            USED=$(grep -hoE '\$\{?[A-Z_][A-Z_0-9]*' scripts/*.sh scripts/common/*.sh rootfs/usr/local/bin/dwc-* 2>/dev/null | sed 's/[${]//' | sort -u)
+            DOCS_VARS=$(grep -oE '\\`[A-Z_][A-Z_0-9]*\\`' docs/REFERENCE.md | sed 's/`//g' | sort -u)
+            echo "Used in scripts but not in REFERENCE.md:"
+            for v in $USED; do
+              if ! echo "$DOCS_VARS" | grep -qxF "$v"; then
+                if [ ${#v} -ge 3 ] && [ ${#v} -le 30 ]; then
+                  echo "- $v"
+                fi
+              fi
+            done
+            echo
+          } >> "$REPORT"
+          echo "OK"
+          echo "::endgroup::"
+
+          echo "::group::secret scan"
+          {
+            echo "## Secret scan (basic grep)"
+            echo
+            HITS=$(grep -rE '(AKIA[0-9A-Z]{16}|ghp_[a-zA-Z0-9]{36}|ghs_[a-zA-Z0-9]{36}|sk-[a-zA-Z0-9]{32,}|xoxb-[a-zA-Z0-9-]{20,})' \
+              --exclude-dir=.git --exclude-dir=node_modules . 2>/dev/null || true)
+            if [ -n "$HITS" ]; then
+              echo "**CRITICAL: secrets found**"
+              echo "$HITS" | head -20
+            else
+              echo "No obvious secrets found. "
+            fi
+            echo
+          } >> "$REPORT"
+          echo "OK"
+          echo "::endgroup::"
+
+          # Output report
+          cat "$REPORT"
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-report
+          path: audit-report.md
+
+      - name: Open issue on findings
+        if: github.event_name == 'workflow_dispatch' && inputs.open_issue == 'true'
+        run: |
+          if grep -qE 'WARN|CRITICAL' audit-report.md; then
+            echo "Findings exist; opening issue"
+            gh issue create \
+              --title "Weekly code audit findings $(date +%F)" \
+              --body-file audit-report.md \
+              --label "audit,automated" || echo "issue issue created failed (token?)"
+          else
+            echo "No findings; skipping issue"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
